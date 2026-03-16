@@ -1,0 +1,28 @@
+{
+  "name": "create-inertiajs-java",
+  "version": "0.1.0",
+  "description": "Scaffold an Inertia.js + Java project",
+  "type": "module",
+  "bin": {
+    "create-inertiajs-java": "src/index.js"
+  },
+  "files": [
+    "src"
+  ],
+  "keywords": [
+    "inertia",
+    "inertiajs",
+    "java",
+    "spring",
+    "javalin",
+    "vue",
+    "react",
+    "svelte",
+    "scaffold"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "prompts": "^2.4.2",
+    "kleur": "^4.1.5"
+  }
+}
