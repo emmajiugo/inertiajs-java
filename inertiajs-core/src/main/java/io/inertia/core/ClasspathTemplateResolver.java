@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 public final class ClasspathTemplateResolver implements TemplateResolver {
 
     private static final String PLACEHOLDER = "@inertia";
+    private static final String HEAD_PLACEHOLDER = "@inertiaHead";
     private final String classpathLocation;
     private final String cachedTemplate;
 
@@ -30,7 +31,14 @@ public final class ClasspathTemplateResolver implements TemplateResolver {
     public String resolve(String pageJson) {
         String template = cachedTemplate != null ? cachedTemplate : loadTemplate(classpathLocation);
         String div = "<div id=\"app\" data-page=\"" + escapeHtml(pageJson) + "\"></div>";
-        return template.replace(PLACEHOLDER, div);
+        return template
+                .replace(HEAD_PLACEHOLDER, "")
+                .replace(PLACEHOLDER, div);
+    }
+
+    @Override
+    public String getRawTemplate() {
+        return cachedTemplate != null ? cachedTemplate : loadTemplate(classpathLocation);
     }
 
     private static String escapeHtml(String input) {

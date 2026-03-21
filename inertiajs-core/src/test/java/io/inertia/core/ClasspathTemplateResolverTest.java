@@ -35,4 +35,33 @@ class ClasspathTemplateResolverTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("not found");
     }
+
+    @Test
+    void stripsInertiaHeadPlaceholderInCsrResolve() {
+        var resolver = new ClasspathTemplateResolver("templates/test-ssr.html");
+
+        String html = resolver.resolve("{\"component\":\"Test\"}");
+
+        assertThat(html).doesNotContain("@inertiaHead");
+        assertThat(html).contains("<div id=\"app\" data-page=\"");
+    }
+
+    @Test
+    void getRawTemplateReturnsTemplateWithPlaceholdersIntact() {
+        var resolver = new ClasspathTemplateResolver("templates/test-ssr.html");
+
+        String raw = resolver.getRawTemplate();
+
+        assertThat(raw).contains("@inertiaHead");
+        assertThat(raw).contains("@inertia");
+    }
+
+    @Test
+    void getRawTemplateThrowsForDefaultInterface() {
+        // A custom TemplateResolver that doesn't override getRawTemplate()
+        TemplateResolver custom = pageJson -> "<html>" + pageJson + "</html>";
+
+        assertThatThrownBy(custom::getRawTemplate)
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
 }
