@@ -64,9 +64,9 @@ tasks.register<Exec>("dev") {
         sleep 1
 
         # 1. Start SSR server first (so Spring Boot can connect to it)
-        node "${'$'}FRONTEND_DIR/ssr-server.js" &
+        (cd "${'$'}FRONTEND_DIR" && node ssr-server.js) &
         SSR_PID=${'$'}!
-        sleep 1
+        sleep 2
         echo "✓ SSR server started on http://127.0.0.1:13714"
 
         # 2. Start Spring Boot in the background
@@ -90,7 +90,7 @@ tasks.register<Exec>("dev") {
         echo "✓ Spring Boot started on http://localhost:8080"
 
         # 3. Start Vite dev server last (it proxies to Spring Boot)
-        npx --prefix "${'$'}FRONTEND_DIR" vite --port 5173 --strictPort &
+        (cd "${'$'}FRONTEND_DIR" && npx vite --port 5173 --strictPort) &
         VITE_PID=${'$'}!
         sleep 1
         echo "✓ Vite dev server started on http://localhost:5173"

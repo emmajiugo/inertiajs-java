@@ -1,33 +1,28 @@
 import http from 'node:http'
-import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-
-// In dev mode, use Vite to load the SSR module dynamically.
-// In production, load the pre-built SSR bundle.
 const isDev = process.env.NODE_ENV !== 'production'
+const port = parseInt(process.env.SSR_PORT || '13714', 10)
 
+let vite
 let render
 
 if (isDev) {
-  // Dynamic import via Vite's ssrLoadModule for HMR support
+  // In dev mode, create a Vite server that loads the project's vite.config.ts
+  // (which includes the Vue plugin needed to parse .vue files)
   const { createServer } = await import('vite')
-  const vite = await createServer({
+  vite = await createServer({
+    root: __dirname,
     server: { middlewareMode: true },
     appType: 'custom',
   })
-
-  const mod = await vite.ssrLoadModule(resolve(__dirname, 'src/ssr.ts'))
-  render = mod.default
 } else {
-  // Production: load the pre-built SSR bundle
+  // In production, load the pre-built SSR bundle once
   const mod = await import(resolve(__dirname, 'dist/ssr/ssr.js'))
   render = mod.default
 }
-
-const port = parseInt(process.env.SSR_PORT || '13714', 10)
 
 const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/render') {
@@ -35,6 +30,12 @@ const server = http.createServer(async (req, res) => {
     req.on('data', (chunk) => { body += chunk })
     req.on('end', async () => {
       try {
+        // In dev mode, load the module on each request for HMR
+        if (isDev) {
+          const mod = await vite.ssrLoadModule(resolve(__dirname, 'src/ssr.ts'))
+          render = mod.default
+        }
+
         const page = JSON.parse(body)
         const result = await render(page)
         const response = JSON.stringify({

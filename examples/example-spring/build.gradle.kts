@@ -72,7 +72,7 @@ tasks.register<Exec>("dev") {
         echo "✓ Spring Boot started on http://localhost:8080"
 
         # Start Vite dev server
-        npx --prefix "${projectDir}/frontend" vite --port 5173 --strictPort &
+        (cd "${projectDir}/frontend" && npx vite --port 5173 --strictPort) &
         VITE_PID=${'$'}!
         sleep 1
         echo "✓ Vite dev server started on http://localhost:5173"
