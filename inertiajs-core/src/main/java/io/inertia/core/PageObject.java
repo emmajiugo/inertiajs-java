@@ -17,6 +17,9 @@ public final class PageObject {
     private final List<String> prependProps;
     private final List<String> deepMergeProps;
     private final Map<String, String> matchPropsOn;
+    private final Map<String, OncePropsEntry> onceProps;
+    private final Boolean encryptHistory;
+    private final Boolean clearHistory;
 
     private PageObject(Builder builder) {
         this.component = builder.component;
@@ -28,6 +31,9 @@ public final class PageObject {
         this.prependProps = nullIfEmpty(builder.prependProps);
         this.deepMergeProps = nullIfEmpty(builder.deepMergeProps);
         this.matchPropsOn = nullIfEmpty(builder.matchPropsOn);
+        this.onceProps = nullIfEmpty(builder.onceProps);
+        this.encryptHistory = builder.encryptHistory;
+        this.clearHistory = builder.clearHistory;
     }
 
     public String getComponent() { return component; }
@@ -39,8 +45,14 @@ public final class PageObject {
     public List<String> getPrependProps() { return prependProps; }
     public List<String> getDeepMergeProps() { return deepMergeProps; }
     public Map<String, String> getMatchPropsOn() { return matchPropsOn; }
+    public Map<String, OncePropsEntry> getOnceProps() { return onceProps; }
+    public Boolean getEncryptHistory() { return encryptHistory; }
+    public Boolean getClearHistory() { return clearHistory; }
 
     public static Builder builder() { return new Builder(); }
+
+    @JsonInclude(JsonInclude.Include.ALWAYS)
+    public record OncePropsEntry(String prop, Long expiresAt) {}
 
     private static <T> List<T> nullIfEmpty(List<T> list) {
         return list != null && !list.isEmpty() ? list : null;
@@ -60,6 +72,9 @@ public final class PageObject {
         private List<String> prependProps;
         private List<String> deepMergeProps;
         private Map<String, String> matchPropsOn;
+        private Map<String, OncePropsEntry> onceProps;
+        private Boolean encryptHistory;
+        private Boolean clearHistory;
 
         private Builder() {}
 
@@ -72,6 +87,9 @@ public final class PageObject {
         public Builder prependProps(List<String> prependProps) { this.prependProps = prependProps; return this; }
         public Builder deepMergeProps(List<String> deepMergeProps) { this.deepMergeProps = deepMergeProps; return this; }
         public Builder matchPropsOn(Map<String, String> matchPropsOn) { this.matchPropsOn = matchPropsOn; return this; }
+        public Builder onceProps(Map<String, OncePropsEntry> onceProps) { this.onceProps = onceProps; return this; }
+        public Builder encryptHistory(Boolean encryptHistory) { this.encryptHistory = encryptHistory; return this; }
+        public Builder clearHistory(Boolean clearHistory) { this.clearHistory = clearHistory; return this; }
 
         public PageObject build() { return new PageObject(this); }
     }

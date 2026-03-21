@@ -1,11 +1,14 @@
 package io.inertia.spring;
 
 import io.inertia.core.InertiaEngine;
+import io.inertia.core.Precognition;
+import io.inertia.core.RenderOptions;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -15,6 +18,7 @@ import java.util.Map;
 public class Inertia {
 
     static final String ERRORS_SESSION_KEY = "io.inertia.errors";
+    static final String FLASH_SESSION_KEY = "io.inertia.flash";
 
     private final InertiaEngine engine;
 
@@ -52,8 +56,49 @@ public class Inertia {
         res.setHeader("Location", url);
     }
 
+    /**
+     * Flash a key-value pair to the session. Available as {@code page.props.flash}
+     * on the next request, then automatically cleared.
+     */
+    @SuppressWarnings("unchecked")
+    public void flash(HttpServletRequest req, String key, Object value) {
+        HttpSession session = req.getSession();
+        Map<String, Object> flash = (Map<String, Object>) session.getAttribute(FLASH_SESSION_KEY);
+        if (flash == null) {
+            flash = new HashMap<>();
+        }
+        flash.put(key, value);
+        session.setAttribute(FLASH_SESSION_KEY, flash);
+    }
+
+    /**
+     * Flash multiple key-value pairs to the session.
+     */
+    public void flash(HttpServletRequest req, Map<String, Object> data) {
+        data.forEach((key, value) -> flash(req, key, value));
+    }
+
     public void location(HttpServletResponse res, String url) {
         engine.location(new SpringInertiaResponse(res), url);
+    }
+
+    public void render(HttpServletRequest req, HttpServletResponse res,
+                       String component, Map<String, Object> props,
+                       RenderOptions options) throws IOException {
+        engine.render(
+                new SpringInertiaRequest(req),
+                new SpringInertiaResponse(res),
+                component, props, options);
+    }
+
+    public boolean isPrecognitionRequest(HttpServletRequest req) {
+        return Precognition.isPrecognitionRequest(new SpringInertiaRequest(req));
+    }
+
+    public void precognitionRespond(HttpServletResponse res,
+                                    Map<String, String> errors) throws IOException {
+        Precognition.respond(new SpringInertiaResponse(res), errors,
+                engine.getConfig().getJsonSerializer());
     }
 
     public InertiaEngine getEngine() {

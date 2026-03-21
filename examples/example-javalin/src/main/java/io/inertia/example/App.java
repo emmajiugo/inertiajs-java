@@ -3,6 +3,7 @@ package io.inertia.example;
 import io.inertia.core.ClasspathTemplateResolver;
 import io.inertia.core.InertiaConfig;
 import io.inertia.core.InertiaEngine;
+import io.inertia.core.ViteManifestVersionResolver;
 import io.inertia.javalin.Inertia;
 import io.inertia.javalin.InertiaPlugin;
 import io.javalin.Javalin;
@@ -26,10 +27,10 @@ public class App {
         boolean isDev = "true".equals(System.getenv("DEV"));
         String templatePath = isDev ? "templates/app-dev.html" : "templates/app.html";
 
-        // Set up Inertia engine
+        // Set up Inertia engine (version auto-detected from Vite manifest)
         InertiaConfig config = InertiaConfig.builder()
-                .version("1.0.0")
-                .templateResolver(new ClasspathTemplateResolver(templatePath))
+                .versionSupplier(ViteManifestVersionResolver.lazy("static/.vite/manifest.json"))
+                .templateResolver(new ClasspathTemplateResolver(templatePath, isDev))
                 .build();
 
         InertiaEngine engine = new InertiaEngine(config);

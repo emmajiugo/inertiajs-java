@@ -7,12 +7,17 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Reads validation errors from the session (stored by
- * {@link Inertia#redirectWithErrors}) and shares them as the "errors" prop.
- * Errors are consumed (removed from session) after being read.
+ * Reads validation errors and flash data from the session and shares them as props.
+ * Both are consumed (removed from session) after being read.
+ *
+ * <ul>
+ *   <li>Errors: available as {@code page.props.errors}</li>
+ *   <li>Flash: available as {@code page.props.flash}</li>
+ * </ul>
  */
 public class InertiaValidationSharedProps implements SharedPropsResolver {
 
@@ -30,12 +35,22 @@ public class InertiaValidationSharedProps implements SharedPropsResolver {
             return Map.of();
         }
 
+        Map<String, Object> shared = new HashMap<>();
+
+        // Validation errors
         Object errors = session.getAttribute(Inertia.ERRORS_SESSION_KEY);
         if (errors instanceof Map<?, ?>) {
             session.removeAttribute(Inertia.ERRORS_SESSION_KEY);
-            return Map.of("errors", errors);
+            shared.put("errors", errors);
         }
 
-        return Map.of();
+        // Flash data
+        Object flash = session.getAttribute(Inertia.FLASH_SESSION_KEY);
+        if (flash instanceof Map<?, ?>) {
+            session.removeAttribute(Inertia.FLASH_SESSION_KEY);
+            shared.put("flash", flash);
+        }
+
+        return shared;
     }
 }

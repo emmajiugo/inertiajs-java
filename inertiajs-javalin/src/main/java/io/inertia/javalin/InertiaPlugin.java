@@ -2,6 +2,8 @@ package io.inertia.javalin;
 
 import io.inertia.core.InertiaEngine;
 import io.javalin.config.JavalinConfig;
+
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -43,16 +45,24 @@ public class InertiaPlugin {
      */
     @SuppressWarnings("unchecked")
     public void configure(JavalinConfig config) {
-        // Shared props resolver for validation errors via ThreadLocal
+        // Shared props resolver: reads errors + flash from ThreadLocal
         engine.addSharedPropsResolver(req -> {
-            Map<String, String> errors = InertiaErrorsHolder.getAndClear();
+            Map<String, Object> shared = new HashMap<>();
+
+            Map<String, String> errors = InertiaSessionHolder.getAndClearErrors();
             if (errors != null && !errors.isEmpty()) {
-                return Map.of("errors", errors);
+                shared.put("errors", errors);
             }
-            return Map.of();
+
+            Map<String, Object> flash = InertiaSessionHolder.getAndClearFlash();
+            if (flash != null && !flash.isEmpty()) {
+                shared.put("flash", flash);
+            }
+
+            return shared;
         });
 
-        // Before: set Vary header + version check + read session errors
+        // Before: set Vary header + version check + read session data
         config.routes.before(ctx -> {
             ctx.header("Vary", "X-Inertia");
 
@@ -65,11 +75,18 @@ public class InertiaPlugin {
                 return;
             }
 
-            // Move session errors to ThreadLocal for the shared props resolver
+            // Move session errors to ThreadLocal
             Map<String, String> errors = ctx.sessionAttribute(Inertia.ERRORS_SESSION_KEY);
             if (errors != null) {
                 ctx.sessionAttribute(Inertia.ERRORS_SESSION_KEY, null);
-                InertiaErrorsHolder.set(errors);
+                InertiaSessionHolder.setErrors(errors);
+            }
+
+            // Move session flash to ThreadLocal
+            Map<String, Object> flash = ctx.sessionAttribute(Inertia.FLASH_SESSION_KEY);
+            if (flash != null) {
+                ctx.sessionAttribute(Inertia.FLASH_SESSION_KEY, null);
+                InertiaSessionHolder.setFlash(flash);
             }
         });
 

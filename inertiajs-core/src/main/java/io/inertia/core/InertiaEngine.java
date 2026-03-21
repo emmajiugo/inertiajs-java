@@ -3,6 +3,7 @@ package io.inertia.core;
 import io.inertia.core.props.AlwaysProp;
 import io.inertia.core.props.DeferredProp;
 import io.inertia.core.props.MergeProp;
+import io.inertia.core.props.OnceProp;
 import io.inertia.core.props.OptionalProp;
 import io.inertia.core.props.Prop;
 
@@ -19,6 +20,10 @@ public class InertiaEngine {
         this.config = Objects.requireNonNull(config);
     }
 
+    public InertiaConfig getConfig() {
+        return config;
+    }
+
     public void addSharedPropsResolver(SharedPropsResolver resolver) {
         sharedPropsResolvers.add(resolver);
     }
@@ -27,6 +32,12 @@ public class InertiaEngine {
 
     public void render(InertiaRequest req, InertiaResponse res,
                        String component, Map<String, Object> props) throws IOException {
+        render(req, res, component, props, RenderOptions.empty());
+    }
+
+    public void render(InertiaRequest req, InertiaResponse res,
+                       String component, Map<String, Object> props,
+                       RenderOptions options) throws IOException {
         Map<String, Object> mergedProps = mergeSharedProps(req, props);
         boolean isPartialReload = isPartialReloadFor(req, component);
 
@@ -35,6 +46,11 @@ public class InertiaEngine {
         if (!isPartialReload) {
             deferredProps = buildDeferredPropsMap(mergedProps);
         }
+
+        // Build once props metadata and filter out already-loaded ones
+        Map<String, PageObject.OncePropsEntry> oncePropsMap = buildOncePropsMap(mergedProps);
+        Set<String> exceptOnceProps = parseExceptOnceProps(req);
+        filterExceptOnceProps(mergedProps, oncePropsMap, exceptOnceProps);
 
         Map<String, Object> filteredProps = filterProps(req, component, mergedProps, isPartialReload);
         MergeMetadata mergeMetadata = buildMergeMetadata(filteredProps);
@@ -50,6 +66,9 @@ public class InertiaEngine {
                 .prependProps(mergeMetadata.prependProps)
                 .deepMergeProps(mergeMetadata.deepMergeProps)
                 .matchPropsOn(mergeMetadata.matchPropsOn)
+                .onceProps(oncePropsMap)
+                .encryptHistory(options.getEncryptHistory())
+                .clearHistory(options.getClearHistory())
                 .build();
 
         if (isInertiaRequest(req)) {
@@ -87,6 +106,39 @@ public class InertiaEngine {
     public void location(InertiaResponse res, String url) {
         res.setStatus(409);
         res.setHeader("X-Inertia-Location", url);
+    }
+
+    // ── Internal: once props handling ──────────────────────────────────
+
+    private Map<String, PageObject.OncePropsEntry> buildOncePropsMap(Map<String, Object> props) {
+        Map<String, PageObject.OncePropsEntry> map = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : props.entrySet()) {
+            if (entry.getValue() instanceof OnceProp<?> op) {
+                String key = op.getKey() != null ? op.getKey() : entry.getKey();
+                map.put(key, new PageObject.OncePropsEntry(entry.getKey(), op.getExpiresAtMs()));
+            }
+        }
+        return map;
+    }
+
+    private Set<String> parseExceptOnceProps(InertiaRequest req) {
+        String header = req.getHeader("X-Inertia-Except-Once-Props");
+        if (header == null || header.isBlank()) return Set.of();
+        return Set.of(header.split(","));
+    }
+
+    private void filterExceptOnceProps(Map<String, Object> props,
+                                       Map<String, PageObject.OncePropsEntry> oncePropsMap,
+                                       Set<String> exceptKeys) {
+        if (exceptKeys.isEmpty()) return;
+        for (String exceptKey : exceptKeys) {
+            PageObject.OncePropsEntry entry = oncePropsMap.get(exceptKey);
+            if (entry != null) {
+                // Remove from props (skip resolving) but keep in oncePropsMap
+                // so client knows it's still a once prop
+                props.remove(entry.prop());
+            }
+        }
     }
 
     // ── Internal: merge shared props with page props ─────────────────
@@ -214,6 +266,8 @@ public class InertiaEngine {
                 resolved.put(entry.getKey(), prop.resolve());
             } else if (value instanceof MergeProp<?> mp) {
                 resolved.put(entry.getKey(), mp.resolve());
+            } else if (value instanceof OnceProp<?> op) {
+                resolved.put(entry.getKey(), op.resolve());
             } else {
                 resolved.put(entry.getKey(), value);
             }

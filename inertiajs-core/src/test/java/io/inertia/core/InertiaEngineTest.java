@@ -658,4 +658,176 @@ class InertiaEngineTest {
             assertThat(parseField(res.getBody(), "deepMergeProps")).containsExactly("settings");
         }
     }
+
+    // ── Once Props ───────────────────────────────────────────────────
+
+    @Nested
+    class OncePropsTests {
+
+        @SuppressWarnings("unchecked")
+        private Map<String, Map<String, Object>> parseOnceProps(String json) throws IOException {
+            Map<String, Object> page = mapper.readValue(json, MAP_TYPE);
+            return (Map<String, Map<String, Object>>) page.get("onceProps");
+        }
+
+        @Test
+        void oncePropIsResolvedOnFirstRequest() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("plans", InertiaProps.once(() -> List.of("free", "pro")));
+
+            engine.render(req, res, "Test", props);
+
+            var pageProps = parsePageProps(res.getBody());
+            assertThat(pageProps).containsKey("plans");
+        }
+
+        @Test
+        void oncePropAppearsInOncePropsField() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("plans", InertiaProps.once(() -> List.of("free", "pro")));
+
+            engine.render(req, res, "Test", props);
+
+            var onceProps = parseOnceProps(res.getBody());
+            assertThat(onceProps).containsKey("plans");
+            assertThat(onceProps.get("plans").get("prop")).isEqualTo("plans");
+            assertThat(onceProps.get("plans").get("expiresAt")).isNull();
+        }
+
+        @Test
+        void oncePropSkippedWhenInExceptHeader() throws IOException {
+            var req = new StubInertiaRequest().asInertia()
+                    .withHeader("X-Inertia-Except-Once-Props", "plans");
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("title", "Hello");
+            props.put("plans", InertiaProps.once(() -> List.of("free", "pro")));
+
+            engine.render(req, res, "Test", props);
+
+            var pageProps = parsePageProps(res.getBody());
+            assertThat(pageProps).containsKey("title");
+            assertThat(pageProps).doesNotContainKey("plans");
+        }
+
+        @Test
+        void oncePropStillInOncePropsMapWhenSkipped() throws IOException {
+            var req = new StubInertiaRequest().asInertia()
+                    .withHeader("X-Inertia-Except-Once-Props", "plans");
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("plans", InertiaProps.once(() -> List.of("free", "pro")));
+
+            engine.render(req, res, "Test", props);
+
+            var onceProps = parseOnceProps(res.getBody());
+            assertThat(onceProps).containsKey("plans");
+        }
+
+        @Test
+        void oncePropSupplierNotCalledWhenSkipped() throws IOException {
+            var req = new StubInertiaRequest().asInertia()
+                    .withHeader("X-Inertia-Except-Once-Props", "plans");
+            var res = new StubInertiaResponse();
+
+            boolean[] called = {false};
+            Map<String, Object> props = new HashMap<>();
+            props.put("plans", InertiaProps.once(() -> { called[0] = true; return "data"; }));
+
+            engine.render(req, res, "Test", props);
+
+            assertThat(called[0]).isFalse();
+        }
+
+        @Test
+        void oncePropWithCustomKey() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("plans", InertiaProps.once(() -> List.of("free")).as("global_plans"));
+
+            engine.render(req, res, "Test", props);
+
+            var onceProps = parseOnceProps(res.getBody());
+            assertThat(onceProps).containsKey("global_plans");
+            assertThat(onceProps.get("global_plans").get("prop")).isEqualTo("plans");
+        }
+
+        @Test
+        void oncePropWithExpiration() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("plans", InertiaProps.once(() -> List.of("free"))
+                    .until(java.time.Instant.ofEpochMilli(1700000000000L)));
+
+            engine.render(req, res, "Test", props);
+
+            var onceProps = parseOnceProps(res.getBody());
+            assertThat(onceProps.get("plans").get("expiresAt")).isEqualTo(1700000000000L);
+        }
+
+        @Test
+        void noOncePropsFieldWhenNoneExist() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            engine.render(req, res, "Test", Map.of("title", "Hello"));
+
+            var onceProps = parseOnceProps(res.getBody());
+            assertThat(onceProps).isNull();
+        }
+    }
+
+    // ── History Encryption ───────────────────────────────────────────
+
+    @Nested
+    class HistoryEncryptionTests {
+
+        @Test
+        void encryptHistoryIncludedWhenSet() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            engine.render(req, res, "Test", Map.of(),
+                    RenderOptions.builder().encryptHistory(true).build());
+
+            var page = parsePage(res.getBody());
+            assertThat(page.get("encryptHistory")).isEqualTo(true);
+        }
+
+        @Test
+        void clearHistoryIncludedWhenSet() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            engine.render(req, res, "Test", Map.of(),
+                    RenderOptions.builder().clearHistory(true).build());
+
+            var page = parsePage(res.getBody());
+            assertThat(page.get("clearHistory")).isEqualTo(true);
+        }
+
+        @Test
+        void historyFieldsOmittedByDefault() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            engine.render(req, res, "Test", Map.of());
+
+            var page = parsePage(res.getBody());
+            assertThat(page).doesNotContainKey("encryptHistory");
+            assertThat(page).doesNotContainKey("clearHistory");
+        }
+    }
 }

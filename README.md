@@ -2,7 +2,31 @@
 
 A server-side adapter for [Inertia.js](https://inertiajs.com) v2, enabling you to build modern single-page apps using Vue, React, or Svelte with a Java backend — no API required.
 
-## Quick Start (Spring Boot)
+Supports **Spring Boot** and **Javalin** out of the box. The core protocol engine is framework-agnostic, so adding support for other frameworks (Quarkus, Micronaut, etc.) is straightforward.
+
+## Getting Started
+
+The fastest way to add Inertia.js to an existing Java project:
+
+```bash
+cd your-java-project
+npx create-inertiajs-java
+```
+
+This interactive CLI will:
+1. Ask you to pick a frontend framework (Vue, React, or Svelte)
+2. Ask which backend you're using (Spring Boot or Javalin)
+3. Scaffold `frontend/` with package.json, Vite config, app entry point, and a sample page
+4. Create `src/main/resources/templates/app.html` and `app-dev.html`
+5. Print step-by-step instructions to wire up your backend
+
+You can also run it non-interactively:
+
+```bash
+npx create-inertiajs-java --frontend vue --backend spring
+```
+
+## Manual Setup (Spring Boot)
 
 ### 1. Add the dependency
 
@@ -13,9 +37,18 @@ dependencies {
 }
 ```
 
+```xml
+<!-- pom.xml -->
+<dependency>
+    <groupId>io.inertia</groupId>
+    <artifactId>inertiajs-spring</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+</dependency>
+```
+
 ### 2. Create root templates
 
-**Production template** — `src/main/resources/templates/app.html`
+**Production** — `src/main/resources/templates/app.html`
 
 ```html
 <!DOCTYPE html>
@@ -32,7 +65,7 @@ dependencies {
 </html>
 ```
 
-**Dev template** — `src/main/resources/templates/app-dev.html`
+**Dev** — `src/main/resources/templates/app-dev.html`
 
 ```html
 <!DOCTYPE html>
@@ -53,23 +86,23 @@ dependencies {
 
 ```properties
 # application.properties
-inertia.version=1.0.0
 inertia.template-path=templates/app.html
+# Version is auto-detected from Vite manifest — no manual config needed
 ```
 
 ```properties
-# application-dev.properties (overrides template for dev mode)
+# application-dev.properties
 inertia.template-path=templates/app-dev.html
+inertia.cache-templates=false
 ```
 
-### 4. Write controllers
+### 4. Write a controller
 
 ```java
 @Controller
 public class EventController {
 
     @Autowired private Inertia inertia;
-    @Autowired private EventService eventService;
 
     @GetMapping("/events")
     public void index(HttpServletRequest req, HttpServletResponse res) throws IOException {
@@ -81,50 +114,110 @@ public class EventController {
     @PostMapping("/events")
     public void store(@RequestBody Map<String, String> body,
                       HttpServletRequest req, HttpServletResponse res) {
-        String title = body.get("title");
-        if (title == null || title.isBlank()) {
-            inertia.redirectWithErrors(req, res, "/events/create",
-                Map.of("title", "Title is required"));
+        Map<String, String> errors = validate(body);
+        if (!errors.isEmpty()) {
+            inertia.redirectWithErrors(req, res, "/events/create", errors);
             return;
         }
-        eventService.create(title);
+        eventService.create(body);
         inertia.redirect(res, "/events");
     }
 }
 ```
 
-### 5. Set up the frontend
+### 5. Run
 
-```ts
-// app.ts
-import { createApp, h } from 'vue'
-import { createInertiaApp } from '@inertiajs/vue3'
+```bash
+# Terminal 1 — backend
+./gradlew bootRun --args='--spring.profiles.active=dev'
 
-createInertiaApp({
-  resolve: (name) => {
-    const pages = import.meta.glob('./pages/**/*.vue', { eager: true })
-    return pages[`./pages/${name}.vue`]
-  },
-  setup({ el, App, props, plugin }) {
-    createApp({ render: () => h(App, props) })
-      .use(plugin)
-      .mount(el)
-  },
-})
+# Terminal 2 — frontend
+cd frontend && npm install && npm run dev
+```
+
+Open http://localhost:5173
+
+## Manual Setup (Javalin)
+
+### 1. Add the dependency
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    implementation("io.inertia:inertiajs-javalin:0.1.0-SNAPSHOT")
+    implementation("io.javalin:javalin:7.1.0")
+}
+```
+
+### 2. Set up the engine and routes
+
+```java
+InertiaConfig config = InertiaConfig.builder()
+    .version("1.0.0")
+    .templateResolver(new ClasspathTemplateResolver("templates/app.html"))
+    .build();
+
+InertiaEngine engine = new InertiaEngine(config);
+InertiaPlugin plugin = new InertiaPlugin(engine);
+Inertia inertia = plugin.inertia();
+
+Javalin app = Javalin.create(cfg -> {
+    plugin.configure(cfg);
+
+    cfg.routes.get("/events", ctx ->
+        inertia.render(ctx, "Events/Index", Map.of("events", eventService.findAll())));
+
+    cfg.routes.post("/events", ctx -> {
+        Map<String, String> errors = validate(ctx.bodyAsClass(Map.class));
+        if (!errors.isEmpty()) {
+            inertia.redirectWithErrors(ctx, "/events/create", errors);
+            return;
+        }
+        eventService.create(ctx.bodyAsClass(Map.class));
+        inertia.redirect(ctx, "/events");
+    });
+});
+
+app.start(8080);
 ```
 
 ## Features
 
-- Full Inertia v2 protocol support (JSON/HTML responses, asset versioning, redirect upgrade)
-- Partial reloads with prop filtering (`only` / `except`)
-- Prop types: `LazyProp`, `AlwaysProp`, `OptionalProp`
-- Shared props (auth, flash data)
-- Validation errors via session flash
+### Core Protocol
+- Full Inertia v2 protocol (JSON/HTML responses, asset versioning, 302-to-303 redirect upgrade)
+- Partial reloads with prop filtering (`X-Inertia-Partial-Data` / `X-Inertia-Partial-Except`)
 - External redirects (`inertia.location()`)
 - Spring Boot auto-configuration (zero config)
 - Pluggable JSON serialization
 
-## Shared Props
+### Prop Types
+
+```java
+import static io.inertia.core.props.InertiaProps.*;
+
+inertia.render(req, res, "Dashboard", Map.of(
+    "stats",       lazy(() -> statsService.compute()),       // evaluated lazily
+    "permissions", optional(() -> permService.getAll()),     // only when explicitly requested
+    "flash",       always(flashMessage),                     // never filtered out
+    "comments",    defer(() -> commentService.findAll()),    // loaded after initial render
+    "sidebar",     defer(() -> sidebarData(), "sidebar"),    // deferred, grouped
+    "posts",       merge(() -> postService.getPage(page)),   // infinite scroll (append)
+    "notifs",      prepend(() -> notifService.latest()),     // prepend to existing
+    "settings",    deepMerge(() -> settingsService.all()),   // deep merge nested objects
+    "plans",       once(() -> planService.findAll())          // resolved once, cached client-side
+));
+```
+
+| Type | Behavior |
+|------|----------|
+| `lazy()` | Evaluated lazily via `Supplier`. Included by default, filtered in partial reloads. |
+| `always()` | Always included, never filtered — even in partial reloads. |
+| `optional()` | Excluded by default. Only included when explicitly requested via `only`. |
+| `defer()` | Excluded from initial render, loaded in a follow-up request. Supports grouping. |
+| `merge()` / `prepend()` / `deepMerge()` | Client-side merging for infinite scroll and nested updates. Chain `.matchOn("id")` to deduplicate. |
+| `once()` | Resolved once, cached client-side. Chain `.as("key")` for cross-page sharing, `.until(duration)` for expiration. |
+
+### Shared Props
 
 ```java
 @Component
@@ -138,41 +231,109 @@ public class AuthSharedProps implements SharedPropsResolver {
 
 All `SharedPropsResolver` beans are auto-discovered and merged into every response.
 
-## Prop Types
+### Validation Errors
 
 ```java
-import static io.inertia.core.props.InertiaProps.*;
+// Spring
+inertia.redirectWithErrors(req, res, "/events/create",
+    Map.of("title", "Title is required"));
 
-inertia.render(req, res, "Dashboard", Map.of(
-    "stats",       lazy(() -> statsService.compute()),     // evaluated lazily
-    "permissions", optional(() -> permService.getAll()),   // only when requested
-    "flash",       always(flashMessage)                    // never filtered
-));
+// Javalin
+inertia.redirectWithErrors(ctx, "/events/create",
+    Map.of("title", "Title is required"));
 ```
 
-## Running the Example
+Errors are stored in the session, consumed on the next request, and available as `form.errors` in your frontend.
 
-### Dev mode (single command)
+### Flash Data
+
+```java
+// Spring
+inertia.flash(req, "success", "Event created successfully!");
+inertia.flash(req, Map.of("success", "Created!", "newId", 42));
+inertia.redirect(res, "/events");
+
+// Javalin
+inertia.flash(ctx, "success", "Event created successfully!");
+inertia.redirect(ctx, "/events");
+```
+
+Flash data is available as `page.props.flash` on the next request, then automatically cleared. Not persisted in history state.
+
+```vue
+<!-- Vue -->
+<div v-if="$page.props.flash?.success">{{ $page.props.flash.success }}</div>
+```
+
+### Precognition (Real-Time Validation)
+
+```java
+// Spring
+if (inertia.isPrecognitionRequest(req)) {
+    Map<String, String> errors = validate(body);
+    inertia.precognitionRespond(res, errors); // 204 or 422
+    return;
+}
+
+// Javalin
+if (inertia.isPrecognitionRequest(ctx)) {
+    inertia.precognitionRespond(ctx, errors);
+    return;
+}
+```
+
+### History Encryption
+
+```java
+inertia.render(req, res, "Account/Settings", props,
+    RenderOptions.builder().encryptHistory(true).build());
+```
+
+### Vite Asset Versioning
+
+Asset versioning is **automatic** for Spring Boot — the adapter reads Vite's `manifest.json` and uses its hash as the version. When you rebuild frontend assets, the version changes automatically, triggering a full reload for clients on stale assets.
+
+No configuration needed. If you want to override:
+
+```properties
+# application.properties
+inertia.version=custom-version        # explicit version (disables auto-detection)
+inertia.manifest-path=static/.vite/manifest.json  # custom manifest location
+```
+
+For Javalin, use `ViteManifestVersionResolver` directly:
+
+```java
+InertiaConfig.builder()
+    .versionSupplier(ViteManifestVersionResolver.lazy("static/.vite/manifest.json"))
+```
+
+## Running the Examples
+
+### Spring Boot example
 
 ```bash
+# Single command (starts both Vite + Spring Boot)
 ./gradlew :examples:example-spring:dev
-```
 
-This starts both Springboot (with `dev` profile) and Vite dev server. Open http://localhost:5173.
-
-### Dev mode (two terminals)
-
-```bash
-# Terminal 1 — backend
+# Or two terminals
 ./gradlew :examples:example-spring:bootRun --args='--spring.profiles.active=dev'
-
-# Terminal 2 — frontend
-cd examples/example-spring/frontend
-npm install
-npm run dev
+cd examples/example-spring/frontend && npm install && npm run dev
 ```
 
 Open http://localhost:5173
+
+### Javalin example
+
+```bash
+# Terminal 1
+DEV=true ./gradlew :examples:example-javalin:run
+
+# Terminal 2
+cd examples/example-javalin/frontend && npm install && npm run dev
+```
+
+Open http://localhost:5174
 
 ### Production build
 
@@ -181,19 +342,26 @@ Open http://localhost:5173
 java -jar examples/example-spring/build/libs/example-spring-0.1.0-SNAPSHOT.jar
 ```
 
-Open http://localhost:8080
-
 ### Docker
 
 ```bash
-# Build from project root
+docker compose up --build
+# or
 docker build -f examples/example-spring/Dockerfile -t inertia-example .
-
-# Run
 docker run -p 8080:8080 inertia-example
 ```
 
 Open http://localhost:8080
+
+## Architecture
+
+```
+inertiajs-core          (zero framework deps, just Jackson)
+    |           |
+inertiajs-spring    inertiajs-javalin
+```
+
+All protocol logic lives in `inertiajs-core`. Framework adapters are thin wrappers that implement `InertiaRequest` and `InertiaResponse` interfaces.
 
 ## License
 

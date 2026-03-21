@@ -21,13 +21,21 @@ public class InertiaAutoConfiguration {
     public InertiaEngine inertiaEngine(InertiaProperties properties,
                                        ObjectProvider<SharedPropsResolver> resolvers,
                                        ObjectProvider<ObjectMapper> objectMapper) {
-        InertiaConfig config = InertiaConfig.builder()
-                .version(properties.getVersion())
+        InertiaConfig.Builder configBuilder = InertiaConfig.builder()
                 .templateResolver(new ClasspathTemplateResolver(
                         properties.getTemplatePath(), properties.isCacheTemplates()))
                 .jsonSerializer(new JacksonJsonSerializer(
-                        objectMapper.getIfAvailable(ObjectMapper::new)))
-                .build();
+                        objectMapper.getIfAvailable(ObjectMapper::new)));
+
+        // Version resolution: explicit > Vite manifest > fallback "1"
+        if (properties.getVersion() != null) {
+            configBuilder.version(properties.getVersion());
+        } else {
+            configBuilder.versionSupplier(
+                    ViteManifestVersionResolver.lazy(properties.getManifestPath()));
+        }
+
+        InertiaConfig config = configBuilder.build();
 
         InertiaEngine engine = new InertiaEngine(config);
         resolvers.orderedStream().forEach(engine::addSharedPropsResolver);

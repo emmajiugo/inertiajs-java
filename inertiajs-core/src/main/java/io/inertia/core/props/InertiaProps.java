@@ -44,4 +44,8 @@ public final class InertiaProps {
     public static <T> MergeProp<T> deepMerge(Supplier<T> supplier) {
         return MergeProp.deep(supplier);
     }
+
+    public static <T> OnceProp<T> once(Supplier<T> supplier) {
+        return new OnceProp<>(supplier);
+    }
 }
