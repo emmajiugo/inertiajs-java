@@ -21,4 +21,28 @@ public class InertiaProperties {
 
     public boolean isCacheTemplates() { return cacheTemplates; }
     public void setCacheTemplates(boolean cacheTemplates) { this.cacheTemplates = cacheTemplates; }
+
+    private Ssr ssr = new Ssr();
+
+    public Ssr getSsr() { return ssr; }
+    public void setSsr(Ssr ssr) { this.ssr = ssr; }
+
+    public static class Ssr {
+        private boolean enabled = true;
+        private String url;               // null by default — SSR only activates when explicitly set
+        private int timeout = 1500;
+        private boolean failOnError = false;
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+
+        public String getUrl() { return url; }
+        public void setUrl(String url) { this.url = url; }
+
+        public int getTimeout() { return timeout; }
+        public void setTimeout(int timeout) { this.timeout = timeout; }
+
+        public boolean isFailOnError() { return failOnError; }
+        public void setFailOnError(boolean failOnError) { this.failOnError = failOnError; }
+    }
 }

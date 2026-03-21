@@ -1,31 +1,45 @@
 package io.inertia.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import io.inertia.core.*;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-@AutoConfiguration
+@AutoConfiguration(afterName = "org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration")
 @ConditionalOnClass(InertiaEngine.class)
 @EnableConfigurationProperties(InertiaProperties.class)
 public class InertiaAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnProperty(name = "inertia.ssr.url")
+    public SsrClient ssrClient(InertiaProperties properties,
+                                ObjectProvider<ObjectMapper> objectMapper) {
+        return new HttpSsrClient(
+                properties.getSsr().getUrl(),
+                java.time.Duration.ofMillis(properties.getSsr().getTimeout()),
+                objectMapper.getIfAvailable(() -> JsonMapper.builder().findAndAddModules().build()));
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     public InertiaEngine inertiaEngine(InertiaProperties properties,
                                        ObjectProvider<SharedPropsResolver> resolvers,
-                                       ObjectProvider<ObjectMapper> objectMapper) {
+                                       ObjectProvider<ObjectMapper> objectMapper,
+                                       ObjectProvider<SsrClient> ssrClient) {
         InertiaConfig.Builder configBuilder = InertiaConfig.builder()
                 .templateResolver(new ClasspathTemplateResolver(
                         properties.getTemplatePath(), properties.isCacheTemplates()))
                 .jsonSerializer(new JacksonJsonSerializer(
-                        objectMapper.getIfAvailable(ObjectMapper::new)));
+                        objectMapper.getIfAvailable(() -> JsonMapper.builder().findAndAddModules().build())));
 
         // Version resolution: explicit > Vite manifest > fallback "1"
         if (properties.getVersion() != null) {
@@ -33,6 +47,14 @@ public class InertiaAutoConfiguration {
         } else {
             configBuilder.versionSupplier(
                     ViteManifestVersionResolver.lazy(properties.getManifestPath()));
+        }
+
+        // SSR configuration
+        SsrClient client = ssrClient.getIfAvailable();
+        if (client != null) {
+            configBuilder.ssrClient(client);
+            configBuilder.ssrEnabled(properties.getSsr().isEnabled());
+            configBuilder.ssrFailOnError(properties.getSsr().isFailOnError());
         }
 
         InertiaConfig config = configBuilder.build();
