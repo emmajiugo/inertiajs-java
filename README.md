@@ -369,6 +369,20 @@ cd examples/example-spring/frontend && npm install && npm run dev
 
 Open http://localhost:5173
 
+### Spring Boot SSR example
+
+```bash
+# Single command (starts Vite + SSR server + Spring Boot)
+./gradlew :examples:example-spring-ssr:dev
+
+# Or three terminals
+cd examples/example-spring-ssr/frontend && npm install && node ssr-server.js
+cd examples/example-spring-ssr/frontend && npm run dev
+./gradlew :examples:example-spring-ssr:bootRun --args='--spring.profiles.active=dev'
+```
+
+Open http://localhost:5173 — view page source to confirm SSR (you'll see pre-rendered HTML instead of an empty `<div id="app">`).
+
 ### Javalin example
 
 ```bash
