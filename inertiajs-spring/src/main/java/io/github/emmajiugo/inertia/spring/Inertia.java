@@ -99,7 +99,7 @@ public class Inertia {
     }
 
     public void precognitionRespond(HttpServletResponse res,
-                                    Map<String, String> errors) throws IOException {
+                                    Map<String, ?> errors) throws IOException {
         Precognition.respond(new SpringInertiaResponse(res), errors,
                 engine.getConfig().getJsonSerializer());
     }

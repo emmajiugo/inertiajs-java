@@ -89,7 +89,7 @@ public class Inertia {
         return Precognition.isPrecognitionRequest(new JavalinInertiaRequest(ctx));
     }
 
-    public void precognitionRespond(Context ctx, Map<String, String> errors) throws IOException {
+    public void precognitionRespond(Context ctx, Map<String, ?> errors) throws IOException {
         Precognition.respond(new JavalinInertiaResponse(ctx), errors,
                 engine.getConfig().getJsonSerializer());
     }

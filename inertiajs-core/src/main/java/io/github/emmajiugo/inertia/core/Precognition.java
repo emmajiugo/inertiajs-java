@@ -47,8 +47,11 @@ public final class Precognition {
     /**
      * Send a Precognition response. If errors is empty, sends 204 (success).
      * Otherwise sends 422 with the errors as JSON.
+     *
+     * <p>Accepts {@code Map<String, String>} (single message per field) or
+     * {@code Map<String, List<String>>} (multiple messages per field).
      */
-    public static void respond(InertiaResponse res, Map<String, String> errors,
+    public static void respond(InertiaResponse res, Map<String, ?> errors,
                                JsonSerializer serializer) throws IOException {
         Objects.requireNonNull(res, "res must not be null");
         Objects.requireNonNull(serializer, "serializer must not be null");
