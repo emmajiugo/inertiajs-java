@@ -33,14 +33,14 @@ npx create-inertiajs-java --frontend vue --backend spring
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.inertia:inertiajs-spring:0.1.0-SNAPSHOT")
+    implementation("io.github.emmajiugo:inertiajs-spring:0.1.0-SNAPSHOT")
 }
 ```
 
 ```xml
 <!-- pom.xml -->
 <dependency>
-    <groupId>io.inertia</groupId>
+    <groupId>io.github.emmajiugo</groupId>
     <artifactId>inertiajs-spring</artifactId>
     <version>0.1.0-SNAPSHOT</version>
 </dependency>
@@ -146,7 +146,7 @@ Open http://localhost:5173
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.inertia:inertiajs-javalin:0.1.0-SNAPSHOT")
+    implementation("io.github.emmajiugo:inertiajs-javalin:0.1.0-SNAPSHOT")
     implementation("io.javalin:javalin:7.1.0")
 }
 ```
@@ -195,7 +195,7 @@ app.start(8080);
 ### Prop Types
 
 ```java
-import static io.inertia.core.props.InertiaProps.*;
+import static io.github.emmajiugo.inertia.core.props.InertiaProps.*;
 
 inertia.render(req, res, "Dashboard", Map.of(
     "stats",       lazy(() -> statsService.compute()),       // evaluated lazily

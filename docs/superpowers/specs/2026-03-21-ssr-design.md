@@ -24,7 +24,7 @@ The design follows the official Inertia.js SSR protocol: a separate Node.js proc
 **`SsrClient`** — Interface for communicating with the SSR server:
 
 ```java
-package io.inertia.core;
+package io.github.emmajiugo.inertia.core;
 
 import java.io.IOException;
 
@@ -36,7 +36,7 @@ public interface SsrClient {
 **`SsrResponse`** — What the SSR server returns:
 
 ```java
-package io.inertia.core;
+package io.github.emmajiugo.inertia.core;
 
 import java.util.List;
 
@@ -49,7 +49,7 @@ public record SsrResponse(List<String> head, String body) {}
 **`HttpSsrClient`** — Default implementation using `java.net.http.HttpClient`:
 
 ```java
-package io.inertia.core;
+package io.github.emmajiugo.inertia.core;
 
 public final class HttpSsrClient implements SsrClient {
     private final HttpClient httpClient;
@@ -120,7 +120,7 @@ public String getRawTemplate() {
 The gateway sits between `InertiaEngine` and the template/SSR rendering decision:
 
 ```java
-package io.inertia.core;
+package io.github.emmajiugo.inertia.core;
 
 import java.io.IOException;
 import java.util.logging.Level;
@@ -402,10 +402,10 @@ End-to-end tests with a real Node SSR server — that's the user's responsibilit
 ## Files Changed
 
 ### New Files (inertiajs-core)
-- `io.inertia.core.SsrClient` — Interface
-- `io.inertia.core.SsrResponse` — Record
-- `io.inertia.core.HttpSsrClient` — Default HTTP implementation
-- `io.inertia.core.SsrGateway` — Decorator/gateway
+- `io.github.emmajiugo.inertia.core.SsrClient` — Interface
+- `io.github.emmajiugo.inertia.core.SsrResponse` — Record
+- `io.github.emmajiugo.inertia.core.HttpSsrClient` — Default HTTP implementation
+- `io.github.emmajiugo.inertia.core.SsrGateway` — Decorator/gateway
 - Test files for each above
 
 ### Modified Files (inertiajs-core)

@@ -3,7 +3,7 @@ plugins {
 }
 
 application {
-    mainClass.set("io.inertia.example.App")
+    mainClass.set("io.github.emmajiugo.inertia.example.App")
 }
 
 dependencies {
