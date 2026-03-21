@@ -39,7 +39,14 @@ public class Inertia {
         ctx.header("Location", url);
     }
 
-    public void redirectWithErrors(Context ctx, String url, Map<String, String> errors) {
+    /**
+     * Redirect back with validation errors. Stores errors in the session
+     * so they are available on the next request via shared props.
+     *
+     * <p>Accepts {@code Map<String, String>} (single message per field) or
+     * {@code Map<String, List<String>>} (multiple messages per field).
+     */
+    public void redirectWithErrors(Context ctx, String url, Map<String, ?> errors) {
         ctx.sessionAttribute(ERRORS_SESSION_KEY, errors);
         ctx.status(303);
         ctx.header("Location", url);

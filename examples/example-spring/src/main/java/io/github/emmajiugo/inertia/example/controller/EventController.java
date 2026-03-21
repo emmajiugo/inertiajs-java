@@ -82,6 +82,23 @@ public class EventController {
         inertia.redirect(res, "/events");
     }
 
+//    @PostMapping("/events")
+//    public void store(@RequestBody Map<String, String> body,
+//                      HttpServletRequest req, HttpServletResponse res) {
+//
+//        Validator.validateMapOrThrow(body, Map.of(
+//                "title", "required",
+//                "description", "required",
+//                "date", "required"
+//        ));
+//
+//        eventService.create(new Event(
+//                null, body.get("title"), body.get("description"),
+//                LocalDate.parse(body.get("date"))
+//        ));
+//        inertia.redirect(res, "/events");
+//    }
+
     @DeleteMapping("/events/{id}")
     public void delete(@PathVariable Long id, HttpServletResponse res) {
         eventService.delete(id);

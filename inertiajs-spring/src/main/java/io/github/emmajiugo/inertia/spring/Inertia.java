@@ -47,9 +47,12 @@ public class Inertia {
     /**
      * Redirect back with validation errors. Stores errors in the session
      * so they are available on the next request via shared props.
+     *
+     * <p>Accepts {@code Map<String, String>} (single message per field) or
+     * {@code Map<String, List<String>>} (multiple messages per field).
      */
     public void redirectWithErrors(HttpServletRequest req, HttpServletResponse res,
-                                   String url, Map<String, String> errors) {
+                                   String url, Map<String, ?> errors) {
         HttpSession session = req.getSession();
         session.setAttribute(ERRORS_SESSION_KEY, errors);
         res.setStatus(303);
