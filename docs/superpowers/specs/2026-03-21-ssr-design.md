@@ -328,7 +328,7 @@ inertia.ssr.fail-on-error=false             # graceful fallback by default
 ```java
 public static class Ssr {
     private boolean enabled = true;
-    private String url = "http://127.0.0.1:13714";
+    private String url;                      // null by default — SSR only activates when explicitly set
     private int timeout = 1500;
     private boolean failOnError = false;
 }
