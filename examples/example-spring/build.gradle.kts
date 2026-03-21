@@ -32,21 +32,26 @@ tasks.register<Exec>("npmBuild") {
 // ── Dev mode: run both servers ───────────────────────────────────────
 
 tasks.register<Exec>("dev") {
-    description = "Starts Vite dev server and Spring Boot together"
+    description = "Starts Spring Boot, then Vite dev server"
     group = "application"
     dependsOn("npmInstall")
     workingDir = file("frontend")
-    // Use npx concurrently to run both processes
-    // Falls back to a shell command that runs both
     commandLine(
         "sh", "-c",
         """
-        npm run dev &
+        cd ${projectDir} && ${rootDir}/gradlew :examples:example-spring:bootRun --args='--spring.profiles.active=dev' &
+        BOOT_PID=${'$'}!
+        echo "⏳ Waiting for Spring Boot on port 8080..."
+        while ! curl -s http://localhost:8080 > /dev/null 2>&1; do sleep 0.5; done
+        echo "✓ Spring Boot started on http://localhost:8080"
+        cd ${projectDir}/frontend && npx vite &
         VITE_PID=${'$'}!
-        sleep 2
+        sleep 1
         echo "✓ Vite dev server started on http://localhost:5173"
-        echo "✓ Starting Spring Boot with dev profile..."
-        cd ${projectDir} && ${rootDir}/gradlew :examples:example-spring:bootRun --args='--spring.profiles.active=dev'
+        echo ""
+        echo "🚀 Open http://localhost:5173"
+        echo ""
+        wait ${'$'}BOOT_PID
         kill ${'$'}VITE_PID 2>/dev/null
         """.trimIndent()
     )

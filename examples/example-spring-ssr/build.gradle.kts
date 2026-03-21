@@ -42,24 +42,32 @@ tasks.register<Exec>("ssrBuild") {
 // ── Dev mode: run Vite + SSR server + Spring Boot ────────────────────
 
 tasks.register<Exec>("dev") {
-    description = "Starts Vite dev server, SSR server, and Spring Boot together"
+    description = "Starts Spring Boot, then Vite dev server and SSR server"
     group = "application"
     dependsOn("npmInstall")
     workingDir = file("frontend")
     commandLine(
         "sh", "-c",
         """
-        npm run dev &
-        VITE_PID=${'$'}!
-        node ssr-server.js &
+        cd ${projectDir} && ${rootDir}/gradlew :examples:example-spring-ssr:bootRun --args='--spring.profiles.active=dev' &
+        BOOT_PID=${'$'}!
+        echo "⏳ Waiting for Spring Boot on port 8080..."
+        while ! curl -s http://localhost:8080 > /dev/null 2>&1; do sleep 0.5; done
+        echo "✓ Spring Boot started on http://localhost:8080"
+        cd ${projectDir}/frontend && node ssr-server.js &
         SSR_PID=${'$'}!
-        sleep 2
-        echo "✓ Vite dev server started on http://localhost:5173"
+        sleep 1
         echo "✓ SSR server started on http://127.0.0.1:13714"
-        echo "✓ Starting Spring Boot with dev profile..."
-        cd ${projectDir} && ${rootDir}/gradlew :examples:example-spring-ssr:bootRun --args='--spring.profiles.active=dev'
-        kill ${'$'}VITE_PID 2>/dev/null
+        cd ${projectDir}/frontend && npx vite &
+        VITE_PID=${'$'}!
+        sleep 1
+        echo "✓ Vite dev server started on http://localhost:5173"
+        echo ""
+        echo "🚀 Open http://localhost:5173"
+        echo ""
+        wait ${'$'}BOOT_PID
         kill ${'$'}SSR_PID 2>/dev/null
+        kill ${'$'}VITE_PID 2>/dev/null
         """.trimIndent()
     )
 }
