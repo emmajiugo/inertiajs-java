@@ -2,7 +2,6 @@
 
 ## Lower Priority / Larger Effort
 
-- **SSR (Server-Side Rendering)** — Render Vue/React components on the server for SEO and initial load performance. Complex — requires Node/Deno runtime.
 - **Quarkus adapter** (`inertiajs-quarkus`) — Wraps Quarkus `RoutingContext`. Uses `ContainerRequestFilter`.
 - **Micronaut adapter** (`inertiajs-micronaut`) — Wraps Micronaut's `HttpRequest`/`MutableHttpResponse`.
 
@@ -15,6 +14,7 @@
 - **History encryption** — `encryptHistory` and `clearHistory` fields on page object, set via `RenderOptions`.
 - **Precognition validation** — Real-time form validation. Detects `Precognition: true` header, returns 204 (success) or 422 (errors). (`Precognition` helper, `inertia.isPrecognitionRequest()`, `inertia.precognitionRespond()`)
 - **Spring Boot DevTools** — Template re-reading in dev mode via `inertia.cache-templates=false`. (`ClasspathTemplateResolver` cache flag)
+- **SSR (Server-Side Rendering)** — Render Vue/React components on the server for SEO and initial load performance. Framework-agnostic, follows official Inertia SSR protocol (HTTP to persistent Node.js SSR server). Configurable fallback (graceful CSR by default or fail-hard). Global default + per-render override via `RenderOptions.ssr()`. (`SsrClient`, `HttpSsrClient`, `SsrGateway`)
 - **Project scaffolding CLI** (`npx create-inertiajs-java`) — Interactive initializer that scaffolds the frontend directory and templates inside an existing Java project. Supports Vue/React/Svelte and Spring Boot/Javalin.
 - **Javalin adapter** (`inertiajs-javalin`) — Wraps Javalin 7's `Context`. Plugin with before/after middleware.
 

@@ -20,6 +20,7 @@ Port+adapter pattern. All protocol logic lives in `inertiajs-core` (zero framewo
 - Javalin adapter uses `InertiaPlugin` — register middleware via `plugin.registerMiddleware(app)`.
 - Validation errors flow via session: `inertia.redirectWithErrors(req/ctx, res, url, errorMap)`.
 - Two templates: `app.html` (production, references built assets) and `app-dev.html` (dev, references Vite dev server). Switched via Spring profile `dev` or `DEV=true` env var (Javalin).
+- SSR uses `SsrGateway` (decorator pattern) between `InertiaEngine` and `TemplateResolver`. When SSR is enabled, it calls the SSR server via `SsrClient`; on failure it falls back to CSR. Configured via `InertiaConfig.ssrClient()` or Spring properties (`inertia.ssr.url`, `inertia.ssr.timeout`, etc.). Templates use `@inertiaHead` placeholder for SSR head injection.
 
 ## Build & Test
 

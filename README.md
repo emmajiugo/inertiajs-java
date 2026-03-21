@@ -57,6 +57,7 @@ dependencies {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My App</title>
+    @inertiaHead
 </head>
 <body>
     @inertia
@@ -74,6 +75,7 @@ dependencies {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My App</title>
+    @inertiaHead
 </head>
 <body>
     @inertia
@@ -288,6 +290,50 @@ if (inertia.isPrecognitionRequest(ctx)) {
 inertia.render(req, res, "Account/Settings", props,
     RenderOptions.builder().encryptHistory(true).build());
 ```
+
+### Server-Side Rendering (SSR)
+
+SSR renders your Vue/React components to HTML on the server for better SEO and faster initial page loads. Requires a separate Node.js SSR server (the [official Inertia SSR protocol](https://inertiajs.com/server-side-rendering)).
+
+**Spring Boot** — add to `application.properties`:
+
+```properties
+inertia.ssr.url=http://127.0.0.1:13714
+# inertia.ssr.timeout=1500          # default 1500ms
+# inertia.ssr.fail-on-error=false   # default: graceful fallback to CSR
+```
+
+**Javalin** — configure via `InertiaConfig`:
+
+```java
+InertiaConfig config = InertiaConfig.builder()
+    .templateResolver(new ClasspathTemplateResolver("templates/app.html"))
+    .ssrClient(new HttpSsrClient("http://127.0.0.1:13714", Duration.ofMillis(1500)))
+    .ssrEnabled(true)
+    .build();
+```
+
+**Per-render control** — disable SSR for specific pages (e.g., admin dashboards):
+
+```java
+inertia.render(req, res, "Admin/Dashboard", props,
+    RenderOptions.builder().ssr(false).build());
+```
+
+**Template setup** — add `@inertiaHead` to your templates for SSR head injection:
+
+```html
+<head>
+    <meta charset="UTF-8" />
+    @inertiaHead
+</head>
+<body>
+    @inertia
+    <script type="module" src="/assets/app.js"></script>
+</body>
+```
+
+When SSR is not configured or falls back, `@inertiaHead` is simply stripped. You can also provide a custom `SsrClient` bean (Spring) to use a different HTTP client.
 
 ### Vite Asset Versioning
 
