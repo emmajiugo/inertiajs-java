@@ -55,7 +55,7 @@ tasks.register<Exec>("dev") {
         ${rootDir}/gradlew :examples:example-spring:bootRun --args='--spring.profiles.active=dev' &
         BOOT_PID=${'$'}!
         echo "⏳ Waiting for Spring Boot on port 8080..."
-        for i in $(seq 1 60); do
+        for i in ${'$'}(seq 1 60); do
             if curl -s -o /dev/null http://localhost:8080 2>/dev/null; then
                 break
             fi
@@ -72,9 +72,8 @@ tasks.register<Exec>("dev") {
         echo "✓ Spring Boot started on http://localhost:8080"
 
         # Start Vite dev server
-        cd frontend && npx vite --port 5173 --strictPort &
+        npx --prefix "${projectDir}/frontend" vite --port 5173 --strictPort &
         VITE_PID=${'$'}!
-        cd ..
         sleep 1
         echo "✓ Vite dev server started on http://localhost:5173"
         echo ""
