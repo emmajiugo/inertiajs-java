@@ -313,11 +313,26 @@ InertiaConfig config = InertiaConfig.builder()
     .build();
 ```
 
-**Per-render control** — disable SSR for specific pages (e.g., admin dashboards):
+**Per-render control** — disable SSR for specific pages (e.g., forms, admin dashboards):
 
 ```java
-inertia.render(req, res, "Admin/Dashboard", props,
+// Disable SSR for this page
+inertia.render(req, res, "Events/Create", Map.of(),
     RenderOptions.builder().ssr(false).build());
+```
+
+Or flip it: disable SSR globally and opt in per route:
+
+```properties
+# application.properties
+inertia.ssr.url=http://127.0.0.1:13714
+inertia.ssr.enabled=false
+```
+
+```java
+// Only this page uses SSR
+inertia.render(req, res, "Home", props,
+    RenderOptions.builder().ssr(true).build());
 ```
 
 **Template setup** — add `@inertiaHead` to your templates for SSR head injection:

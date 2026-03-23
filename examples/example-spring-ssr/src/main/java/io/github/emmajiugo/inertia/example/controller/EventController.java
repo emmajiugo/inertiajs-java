@@ -2,6 +2,7 @@ package io.github.emmajiugo.inertia.example.controller;
 
 import io.github.emmajiugo.inertia.example.model.Event;
 import io.github.emmajiugo.inertia.example.service.EventService;
+import io.github.emmajiugo.inertia.core.RenderOptions;
 import io.github.emmajiugo.inertia.spring.Inertia;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -52,7 +53,9 @@ public class EventController {
 
     @GetMapping("/events/create")
     public void create(HttpServletRequest req, HttpServletResponse res) throws IOException {
-        inertia.render(req, res, "Events/Create");
+        // Disable SSR for this page — forms with client-side state don't benefit from SSR
+        inertia.render(req, res, "Events/Create", Map.of(),
+                RenderOptions.builder().ssr(false).build());
     }
 
     @PostMapping("/events")
