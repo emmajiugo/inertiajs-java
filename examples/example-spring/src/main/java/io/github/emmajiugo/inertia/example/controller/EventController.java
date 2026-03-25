@@ -3,6 +3,8 @@ package io.github.emmajiugo.inertia.example.controller;
 import io.github.emmajiugo.inertia.example.model.Event;
 import io.github.emmajiugo.inertia.example.service.EventService;
 import io.github.emmajiugo.inertia.spring.Inertia;
+import io.github.emmajiugo.javalidator.Validator;
+import io.github.emmajiugo.javalidator.model.ValidationResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Controller;
@@ -58,51 +60,24 @@ public class EventController {
     @PostMapping("/events")
     public void store(@RequestBody Map<String, String> body,
                       HttpServletRequest req, HttpServletResponse res) {
-        String title = body.get("title");
-        String description = body.get("description");
-        String date = body.get("date");
 
-        Map<String, String> errors = new LinkedHashMap<>();
-        if (title == null || title.isBlank()) {
-            errors.put("title", "Title is required");
-        }
-        if (description == null || description.isBlank()) {
-            errors.put("description", "Description is required");
-        }
-        if (date == null || date.isBlank()) {
-            errors.put("date", "Date is required");
-        }
+        ValidationResponse validationResponse = Validator.validateMap(body, Map.of(
+                "title",    "required",
+                "description", "required",
+                "date", "required"
+        ));
 
-        if (!errors.isEmpty()) {
-            inertia.redirectWithErrors(req, res, "/events/create", errors);
+        if (!validationResponse.valid()) {
+            inertia.redirectWithErrors(req, res, "/events/create", validationResponse.toFlatMap());
             return;
         }
 
-        eventService.create(new Event(null, title, description, LocalDate.parse(date)));
+        eventService.create(new Event(
+                null, body.get("title"), body.get("description"),
+                LocalDate.parse(body.get("date"))
+        ));
         inertia.redirect(res, "/events");
     }
-
-//    @PostMapping("/events")
-//    public void store(@RequestBody Map<String, String> body,
-//                      HttpServletRequest req, HttpServletResponse res) {
-//
-//        ValidationResponse response = Validator.validateMap(body, Map.of(
-//                "title", "required",
-//                "description", "required",
-//                "date", "required"
-//        ));
-//
-//        if (!response.valid()) {
-//            inertia.redirectWithErrors(req, res, "/events/create", response.toFlatMap());
-//            return;
-//        }
-//
-//        eventService.create(new Event(
-//                null, body.get("title"), body.get("description"),
-//                LocalDate.parse(body.get("date"))
-//        ));
-//        inertia.redirect(res, "/events");
-//    }
 
     @DeleteMapping("/events/{id}")
     public void delete(@PathVariable Long id, HttpServletResponse res) {

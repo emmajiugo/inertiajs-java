@@ -6,6 +6,7 @@ plugins {
 dependencies {
     implementation(project(":inertiajs-spring"))
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("io.github.emmajiugo:javalidator-spring:1.0.0")
 }
 
 // ── npm install ──────────────────────────────────────────────────────
