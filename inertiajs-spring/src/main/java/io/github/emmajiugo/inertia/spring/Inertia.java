@@ -50,13 +50,40 @@ public class Inertia {
      *
      * <p>Accepts {@code Map<String, String>} (single message per field) or
      * {@code Map<String, List<String>>} (multiple messages per field).
+     * Errors are stored under the "default" error bag.
      */
     public void redirectWithErrors(HttpServletRequest req, HttpServletResponse res,
                                    String url, Map<String, ?> errors) {
+        redirectWithErrors(req, res, url, errors, "default");
+    }
+
+    /**
+     * Redirect back with validation errors scoped to a named error bag.
+     *
+     * <p>Accepts {@code Map<String, String>} (single message per field) or
+     * {@code Map<String, List<String>>} (multiple messages per field).
+     */
+    @SuppressWarnings("unchecked")
+    public void redirectWithErrors(HttpServletRequest req, HttpServletResponse res,
+                                   String url, Map<String, ?> errors, String errorBag) {
         HttpSession session = req.getSession();
-        session.setAttribute(ERRORS_SESSION_KEY, errors);
+        Map<String, Map<String, ?>> bags = (Map<String, Map<String, ?>>) session.getAttribute(ERRORS_SESSION_KEY);
+        if (bags == null) {
+            bags = new HashMap<>();
+        }
+        bags.put(errorBag, errors);
+        session.setAttribute(ERRORS_SESSION_KEY, bags);
         res.setStatus(303);
         res.setHeader("Location", url);
+    }
+
+    /**
+     * Redirect to a URL that contains a fragment (hash). Responds with 409 and
+     * the {@code X-Inertia-Redirect} header so Inertia.js performs a full-page
+     * visit rather than a fetch.
+     */
+    public void redirectWithFragment(HttpServletResponse res, String url) {
+        engine.redirectWithFragment(new SpringInertiaResponse(res), url);
     }
 
     /**

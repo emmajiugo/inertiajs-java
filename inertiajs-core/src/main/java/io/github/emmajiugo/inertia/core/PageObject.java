@@ -20,6 +20,9 @@ public final class PageObject {
     private final Map<String, OncePropsEntry> onceProps;
     private final Boolean encryptHistory;
     private final Boolean clearHistory;
+    private final Boolean preserveFragment;
+    private final Map<String, Object> scrollProps;
+    private final List<String> sharedProps;
 
     private PageObject(Builder builder) {
         this.component = builder.component;
@@ -34,6 +37,9 @@ public final class PageObject {
         this.onceProps = nullIfEmpty(builder.onceProps);
         this.encryptHistory = builder.encryptHistory;
         this.clearHistory = builder.clearHistory;
+        this.preserveFragment = builder.preserveFragment;
+        this.scrollProps = nullIfEmpty(builder.scrollProps);
+        this.sharedProps = nullIfEmpty(builder.sharedProps);
     }
 
     public String getComponent() { return component; }
@@ -48,6 +54,9 @@ public final class PageObject {
     public Map<String, OncePropsEntry> getOnceProps() { return onceProps; }
     public Boolean getEncryptHistory() { return encryptHistory; }
     public Boolean getClearHistory() { return clearHistory; }
+    public Boolean getPreserveFragment() { return preserveFragment; }
+    public Map<String, Object> getScrollProps() { return scrollProps; }
+    public List<String> getSharedProps() { return sharedProps; }
 
     public static Builder builder() { return new Builder(); }
 
@@ -75,6 +84,9 @@ public final class PageObject {
         private Map<String, OncePropsEntry> onceProps;
         private Boolean encryptHistory;
         private Boolean clearHistory;
+        private Boolean preserveFragment;
+        private Map<String, Object> scrollProps;
+        private List<String> sharedProps;
 
         private Builder() {}
 
@@ -90,6 +102,9 @@ public final class PageObject {
         public Builder onceProps(Map<String, OncePropsEntry> onceProps) { this.onceProps = onceProps; return this; }
         public Builder encryptHistory(Boolean encryptHistory) { this.encryptHistory = encryptHistory; return this; }
         public Builder clearHistory(Boolean clearHistory) { this.clearHistory = clearHistory; return this; }
+        public Builder preserveFragment(Boolean preserveFragment) { this.preserveFragment = preserveFragment; return this; }
+        public Builder scrollProps(Map<String, Object> scrollProps) { this.scrollProps = scrollProps; return this; }
+        public Builder sharedProps(List<String> sharedProps) { this.sharedProps = sharedProps; return this; }
 
         public PageObject build() { return new PageObject(this); }
     }

@@ -392,26 +392,6 @@ class InertiaEngineTest {
         }
     }
 
-    // ── Lazy Props ───────────────────────────────────────────────────
-
-    @Nested
-    class LazyPropsTests {
-
-        @Test
-        void lazyPropIsResolvedInFullRender() throws IOException {
-            var req = new StubInertiaRequest().asInertia();
-            var res = new StubInertiaResponse();
-
-            Map<String, Object> props = new HashMap<>();
-            props.put("data", InertiaProps.lazy(() -> "lazy-value"));
-
-            engine.render(req, res, "Test", props);
-
-            var pageProps = parsePageProps(res.getBody());
-            assertThat(pageProps).containsEntry("data", "lazy-value");
-        }
-    }
-
     // ── Deferred Props ───────────────────────────────────────────────
 
     @Nested
@@ -537,6 +517,25 @@ class InertiaEngineTest {
             engine.render(req, res, "Test", props);
 
             assertThat(called[0]).isFalse();
+        }
+
+        @Test
+        void nestedDeferredPropUseDotNotation() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> inner = new HashMap<>();
+            inner.put("permissions", InertiaProps.defer(() -> List.of("read")));
+            inner.put("name", "Alice");
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("user", inner);
+
+            engine.render(req, res, "Test", props);
+
+            var deferred = parseDeferredProps(res.getBody());
+            assertThat(deferred).containsKey("default");
+            assertThat(deferred.get("default")).containsExactly("user.permissions");
         }
     }
 
@@ -832,6 +831,35 @@ class InertiaEngineTest {
         }
     }
 
+    // ── Preserve Fragment ────────────────────────────────────────────
+
+    @Nested
+    class PreserveFragmentTests {
+
+        @Test
+        void preserveFragmentIncludedWhenSet() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            engine.render(req, res, "Test", Map.of(),
+                    RenderOptions.builder().preserveFragment(true).build());
+
+            var page = parsePage(res.getBody());
+            assertThat(page.get("preserveFragment")).isEqualTo(true);
+        }
+
+        @Test
+        void preserveFragmentOmittedByDefault() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            engine.render(req, res, "Test", Map.of());
+
+            var page = parsePage(res.getBody());
+            assertThat(page).doesNotContainKey("preserveFragment");
+        }
+    }
+
     // ── Header Trimming ───────────────────────────────────────────────
 
     @Nested
@@ -1035,6 +1063,382 @@ class InertiaEngineTest {
             engine.render(req, res, "Home", Map.of("name", "World"));
 
             assertThat(res.getBody()).contains("<div id=\"app\" data-page=\"");
+        }
+    }
+
+    // ── Prefetch Detection ───────────────────────────────────────────
+
+    @Nested
+    class PrefetchDetection {
+
+        @Test
+        void detectsPrefetchRequest() {
+            var req = new StubInertiaRequest().asInertia()
+                    .withHeader("Purpose", "prefetch");
+            assertThat(engine.isPrefetchRequest(req)).isTrue();
+        }
+
+        @Test
+        void nonPrefetchRequest() {
+            var req = new StubInertiaRequest().asInertia();
+            assertThat(engine.isPrefetchRequest(req)).isFalse();
+        }
+    }
+
+    // ── Fragment Redirect ────────────────────────────────────────────
+
+    @Nested
+    class FragmentRedirect {
+
+        @Test
+        void redirectWithFragmentReturns409WithInertiaRedirectHeader() {
+            var res = new StubInertiaResponse();
+            engine.redirectWithFragment(res, "/page#section");
+            assertThat(res.getStatus()).isEqualTo(409);
+            assertThat(res.getHeader("X-Inertia-Redirect")).isEqualTo("/page#section");
+        }
+
+        @Test
+        void redirectWithFragmentDoesNotSetLocationHeader() {
+            var res = new StubInertiaResponse();
+            engine.redirectWithFragment(res, "/page#section");
+            assertThat(res.getHeader("X-Inertia-Location")).isNull();
+        }
+    }
+
+    // ── Reset Props ─────────────────────────────────────────────────
+
+    @Nested
+    class ResetProps {
+
+        @SuppressWarnings("unchecked")
+        private List<String> parseField(String json, String field) throws IOException {
+            Map<String, Object> page = mapper.readValue(json, MAP_TYPE);
+            return (List<String>) page.get(field);
+        }
+
+        @Test
+        void resetHeaderExcludesKeysFromMergeMetadata() throws IOException {
+            var req = new StubInertiaRequest().asInertia()
+                    .withHeader("X-Inertia-Reset", "items");
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("items", InertiaProps.merge(() -> List.of("a", "b")));
+            props.put("feed", InertiaProps.merge(() -> List.of("post1")));
+
+            engine.render(req, res, "Test", props);
+
+            var mergeProps = parseField(res.getBody(), "mergeProps");
+            assertThat(mergeProps).containsExactly("feed");
+            assertThat(mergeProps).doesNotContain("items");
+        }
+
+        @Test
+        void resetHeaderWithNoPropsMeansAllMergeMetadataIncluded() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("items", InertiaProps.merge(() -> List.of("a")));
+
+            engine.render(req, res, "Test", props);
+
+            var mergeProps = parseField(res.getBody(), "mergeProps");
+            assertThat(mergeProps).containsExactly("items");
+        }
+    }
+
+    // ── Infinite Scroll Merge Intent ─────────────────────────────────
+
+    @Nested
+    class InfiniteScrollMergeIntent {
+
+        @SuppressWarnings("unchecked")
+        private List<String> parseField(String json, String field) throws IOException {
+            Map<String, Object> page = mapper.readValue(json, MAP_TYPE);
+            return (List<String>) page.get(field);
+        }
+
+        @Test
+        void appendIntentOverridesPrependStrategy() throws IOException {
+            var req = new StubInertiaRequest().asInertia()
+                    .withHeader("X-Inertia-Infinite-Scroll-Merge-Intent", "append");
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("items", InertiaProps.prepend(() -> List.of("a")));
+
+            engine.render(req, res, "Test", props);
+
+            assertThat(parseField(res.getBody(), "mergeProps")).containsExactly("items");
+            assertThat(parseField(res.getBody(), "prependProps")).isNull();
+        }
+
+        @Test
+        void prependIntentOverridesAppendStrategy() throws IOException {
+            var req = new StubInertiaRequest().asInertia()
+                    .withHeader("X-Inertia-Infinite-Scroll-Merge-Intent", "prepend");
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("items", InertiaProps.merge(() -> List.of("a")));
+
+            engine.render(req, res, "Test", props);
+
+            assertThat(parseField(res.getBody(), "prependProps")).containsExactly("items");
+            assertThat(parseField(res.getBody(), "mergeProps")).isNull();
+        }
+
+        @Test
+        void noIntentHeaderPreservesOriginalStrategy() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("items", InertiaProps.prepend(() -> List.of("a")));
+
+            engine.render(req, res, "Test", props);
+
+            assertThat(parseField(res.getBody(), "prependProps")).containsExactly("items");
+            assertThat(parseField(res.getBody(), "mergeProps")).isNull();
+        }
+    }
+
+    // ── Error Bags ──────────────────────────────────────────────────
+
+    @Nested
+    class ErrorBags {
+
+        @Test
+        void selectsErrorBagByHeader() throws IOException {
+            engine.addSharedPropsResolver(req -> {
+                Map<String, Object> errors = new HashMap<>();
+                errors.put("default", Map.of("name", "Name is required"));
+                errors.put("login", Map.of("email", "Invalid email"));
+                return Map.of("errors", errors);
+            });
+
+            var req = new StubInertiaRequest().asInertia()
+                    .withHeader("X-Inertia-Error-Bag", "login");
+            var res = new StubInertiaResponse();
+
+            engine.render(req, res, "Test", Map.of());
+
+            var props = parsePageProps(res.getBody());
+            @SuppressWarnings("unchecked")
+            var errors = (Map<String, Object>) props.get("errors");
+            assertThat(errors).containsEntry("email", "Invalid email");
+            assertThat(errors).doesNotContainKey("name");
+        }
+
+        @Test
+        void selectsDefaultBagWhenNoHeader() throws IOException {
+            engine.addSharedPropsResolver(req -> {
+                Map<String, Object> errors = new HashMap<>();
+                errors.put("default", Map.of("name", "Name is required"));
+                errors.put("login", Map.of("email", "Invalid email"));
+                return Map.of("errors", errors);
+            });
+
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            engine.render(req, res, "Test", Map.of());
+
+            var props = parsePageProps(res.getBody());
+            @SuppressWarnings("unchecked")
+            var errors = (Map<String, Object>) props.get("errors");
+            assertThat(errors).containsEntry("name", "Name is required");
+            assertThat(errors).doesNotContainKey("email");
+        }
+
+        @Test
+        void returnsEmptyErrorsWhenBagNotFound() throws IOException {
+            engine.addSharedPropsResolver(req -> {
+                Map<String, Object> errors = new HashMap<>();
+                errors.put("default", Map.of("name", "required"));
+                return Map.of("errors", errors);
+            });
+
+            var req = new StubInertiaRequest().asInertia()
+                    .withHeader("X-Inertia-Error-Bag", "nonexistent");
+            var res = new StubInertiaResponse();
+
+            engine.render(req, res, "Test", Map.of());
+
+            var props = parsePageProps(res.getBody());
+            @SuppressWarnings("unchecked")
+            var errors = (Map<String, Object>) props.get("errors");
+            assertThat(errors).isEmpty();
+        }
+
+        @Test
+        void flatErrorsMapPassesThroughWhenNotNested() throws IOException {
+            engine.addSharedPropsResolver(req -> Map.of("errors", Map.of("name", "required")));
+
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            engine.render(req, res, "Test", Map.of());
+
+            var props = parsePageProps(res.getBody());
+            @SuppressWarnings("unchecked")
+            var errors = (Map<String, Object>) props.get("errors");
+            assertThat(errors).containsEntry("name", "required");
+        }
+    }
+
+    // ── Shared Props Tracking ────────────────────────────────────────
+
+    @Nested
+    class SharedPropsTracking {
+
+        @SuppressWarnings("unchecked")
+        private List<String> parseSharedProps(String json) throws IOException {
+            Map<String, Object> page = mapper.readValue(json, MAP_TYPE);
+            return (List<String>) page.get("sharedProps");
+        }
+
+        @Test
+        void sharedPropsFieldListsSharedResolverKeys() throws IOException {
+            engine.addSharedPropsResolver(req -> Map.of("appName", "TestApp", "auth", Map.of()));
+
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            engine.render(req, res, "Test", Map.of("title", "Hello"));
+
+            var shared = parseSharedProps(res.getBody());
+            assertThat(shared).containsExactlyInAnyOrder("appName", "auth");
+        }
+
+        @Test
+        void sharedPropsFieldOmittedWhenNoSharedResolvers() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            engine.render(req, res, "Test", Map.of("title", "Hello"));
+
+            var shared = parseSharedProps(res.getBody());
+            assertThat(shared).isNull();
+        }
+
+        @Test
+        void sharedPropsDoesNotIncludePagePropKeys() throws IOException {
+            engine.addSharedPropsResolver(req -> Map.of("appName", "TestApp"));
+
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            engine.render(req, res, "Test", Map.of("title", "Hello"));
+
+            var shared = parseSharedProps(res.getBody());
+            assertThat(shared).containsExactly("appName");
+            assertThat(shared).doesNotContain("title");
+        }
+    }
+
+    // ── Nested Props Integration ─────────────────────────────────────
+
+    @Nested
+    class NestedPropsIntegration {
+
+        @SuppressWarnings("unchecked")
+        private Map<String, List<String>> parseDeferredProps(String json) throws IOException {
+            Map<String, Object> page = mapper.readValue(json, MAP_TYPE);
+            return (Map<String, List<String>>) page.get("deferredProps");
+        }
+
+        @SuppressWarnings("unchecked")
+        private List<String> parseField(String json, String field) throws IOException {
+            Map<String, Object> page = mapper.readValue(json, MAP_TYPE);
+            return (List<String>) page.get(field);
+        }
+
+        @Test
+        void nestedDeferredPropExcludedFromInitialRender() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> inner = new HashMap<>();
+            inner.put("permissions", InertiaProps.defer(() -> List.of("read")));
+            inner.put("name", "Alice");
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("user", inner);
+
+            engine.render(req, res, "Test", props);
+
+            var pageProps = parsePageProps(res.getBody());
+            @SuppressWarnings("unchecked")
+            var user = (Map<String, Object>) pageProps.get("user");
+            assertThat(user).containsKey("name");
+            assertThat(user).doesNotContainKey("permissions");
+
+            var deferred = parseDeferredProps(res.getBody());
+            assertThat(deferred.get("default")).containsExactly("user.permissions");
+        }
+
+        @Test
+        void nestedDeferredPropResolvedViaPartialReloadWithDotNotation() throws IOException {
+            var req = new StubInertiaRequest().asInertia()
+                    .withHeader("X-Inertia-Partial-Component", "Test")
+                    .withHeader("X-Inertia-Partial-Data", "user.permissions");
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> inner = new HashMap<>();
+            inner.put("permissions", InertiaProps.defer(() -> List.of("read", "write")));
+            inner.put("name", "Alice");
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("user", inner);
+
+            engine.render(req, res, "Test", props);
+
+            var pageProps = parsePageProps(res.getBody());
+            @SuppressWarnings("unchecked")
+            var user = (Map<String, Object>) pageProps.get("user");
+            assertThat(user).containsKey("permissions");
+            assertThat(user).doesNotContainKey("name");
+        }
+
+        @Test
+        void nestedMergePropUsesDotNotation() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> inner = new HashMap<>();
+            inner.put("items", InertiaProps.merge(() -> List.of("a", "b")));
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("page", inner);
+
+            engine.render(req, res, "Test", props);
+
+            var mergeProps = parseField(res.getBody(), "mergeProps");
+            assertThat(mergeProps).containsExactly("page.items");
+        }
+
+        @SuppressWarnings("unchecked")
+        @Test
+        void nestedOptionalPropExcludedByDefault() throws IOException {
+            var req = new StubInertiaRequest().asInertia();
+            var res = new StubInertiaResponse();
+
+            Map<String, Object> inner = new HashMap<>();
+            inner.put("details", InertiaProps.optional(() -> "expensive"));
+            inner.put("name", "Alice");
+
+            Map<String, Object> props = new HashMap<>();
+            props.put("user", inner);
+
+            engine.render(req, res, "Test", props);
+
+            var pageProps = parsePageProps(res.getBody());
+            var user = (Map<String, Object>) pageProps.get("user");
+            assertThat(user).containsKey("name");
+            assertThat(user).doesNotContainKey("details");
         }
     }
 }

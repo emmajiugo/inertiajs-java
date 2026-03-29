@@ -2,16 +2,14 @@ package io.github.emmajiugo.inertia.core;
 
 import io.github.emmajiugo.inertia.core.props.AlwaysProp;
 import io.github.emmajiugo.inertia.core.props.DeferredProp;
-import io.github.emmajiugo.inertia.core.props.MergeProp;
-import io.github.emmajiugo.inertia.core.props.OnceProp;
 import io.github.emmajiugo.inertia.core.props.OptionalProp;
 import io.github.emmajiugo.inertia.core.props.Prop;
-import io.github.emmajiugo.inertia.core.props.Resolvable;
 
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
+import java.util.LinkedHashSet;
 
 public class InertiaEngine {
 
@@ -52,23 +50,45 @@ public class InertiaEngine {
         Objects.requireNonNull(options, "options must not be null");
         if (props == null) props = Map.of();
 
-        Map<String, Object> mergedProps = mergeSharedProps(req, props);
+        MergedPropsResult mergedResult = mergeSharedProps(req, props);
+        Map<String, Object> mergedProps = mergedResult.props();
+        List<String> sharedPropKeys = mergedResult.sharedKeys();
         boolean isPartialReload = isPartialReloadFor(req, component);
 
         // Build deferred props map (only on initial render, not partial reloads)
         Map<String, List<String>> deferredProps = null;
         if (!isPartialReload) {
-            deferredProps = buildDeferredPropsMap(mergedProps);
+            deferredProps = PropResolver.buildDeferredPropsMap(mergedProps);
         }
 
         // Build once props metadata and filter out already-loaded ones
-        Map<String, PageObject.OncePropsEntry> oncePropsMap = buildOncePropsMap(mergedProps);
+        Map<String, PageObject.OncePropsEntry> oncePropsMap = PropResolver.buildOncePropsMap(mergedProps);
         Set<String> exceptOnceProps = parseExceptOnceProps(req);
         filterExceptOnceProps(mergedProps, oncePropsMap, exceptOnceProps);
 
         Map<String, Object> filteredProps = filterProps(req, component, mergedProps, isPartialReload);
-        MergeMetadata mergeMetadata = buildMergeMetadata(filteredProps);
-        Map<String, Object> resolvedProps = resolveProps(filteredProps);
+        PropResolver.MergeMetadata mergeMetadata = PropResolver.buildMergeMetadata(filteredProps);
+        Map<String, Object> resolvedProps = PropResolver.resolveProps(filteredProps);
+
+        // Apply infinite scroll merge intent override
+        String mergeIntent = req.getHeader("X-Inertia-Infinite-Scroll-Merge-Intent");
+        if (mergeIntent != null && !mergeIntent.isBlank()) {
+            mergeMetadata = applyMergeIntentOverride(mergeMetadata, mergeIntent.trim());
+        }
+
+        // Strip reset keys from merge metadata
+        Set<String> resetKeys = parseCommaSeparatedHeader(req, "X-Inertia-Reset");
+        if (!resetKeys.isEmpty()) {
+            List<String> filteredMerge = new ArrayList<>(mergeMetadata.mergeProps());
+            List<String> filteredPrepend = new ArrayList<>(mergeMetadata.prependProps());
+            List<String> filteredDeep = new ArrayList<>(mergeMetadata.deepMergeProps());
+            Map<String, String> filteredMatchOn = new LinkedHashMap<>(mergeMetadata.matchPropsOn());
+            filteredMerge.removeAll(resetKeys);
+            filteredPrepend.removeAll(resetKeys);
+            filteredDeep.removeAll(resetKeys);
+            resetKeys.forEach(filteredMatchOn::remove);
+            mergeMetadata = new PropResolver.MergeMetadata(filteredMerge, filteredPrepend, filteredDeep, filteredMatchOn);
+        }
 
         PageObject page = PageObject.builder()
                 .component(component)
@@ -76,13 +96,16 @@ public class InertiaEngine {
                 .url(req.getRequestPath())
                 .version(config.getVersion())
                 .deferredProps(deferredProps)
-                .mergeProps(mergeMetadata.mergeProps)
-                .prependProps(mergeMetadata.prependProps)
-                .deepMergeProps(mergeMetadata.deepMergeProps)
-                .matchPropsOn(mergeMetadata.matchPropsOn)
+                .mergeProps(mergeMetadata.mergeProps())
+                .prependProps(mergeMetadata.prependProps())
+                .deepMergeProps(mergeMetadata.deepMergeProps())
+                .matchPropsOn(mergeMetadata.matchPropsOn())
                 .onceProps(oncePropsMap)
+                .sharedProps(sharedPropKeys)
                 .encryptHistory(options.getEncryptHistory())
                 .clearHistory(options.getClearHistory())
+                .preserveFragment(options.getPreserveFragment())
+                .scrollProps(options.getScrollProps())
                 .build();
 
         if (isInertiaRequest(req)) {
@@ -122,18 +145,16 @@ public class InertiaEngine {
         res.setHeader("X-Inertia-Location", url);
     }
 
-    // ── Internal: once props handling ──────────────────────────────────
-
-    private Map<String, PageObject.OncePropsEntry> buildOncePropsMap(Map<String, Object> props) {
-        Map<String, PageObject.OncePropsEntry> map = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : props.entrySet()) {
-            if (entry.getValue() instanceof OnceProp<?> op) {
-                String key = op.getKey() != null ? op.getKey() : entry.getKey();
-                map.put(key, new PageObject.OncePropsEntry(entry.getKey(), op.getExpiresAtMs()));
-            }
-        }
-        return map;
+    public boolean isPrefetchRequest(InertiaRequest req) {
+        return "prefetch".equals(req.getHeader("Purpose"));
     }
+
+    public void redirectWithFragment(InertiaResponse res, String url) {
+        res.setStatus(409);
+        res.setHeader("X-Inertia-Redirect", url);
+    }
+
+    // ── Internal: once props handling ──────────────────────────────────
 
     private Set<String> parseExceptOnceProps(InertiaRequest req) {
         String header = req.getHeader("X-Inertia-Except-Once-Props");
@@ -159,14 +180,52 @@ public class InertiaEngine {
 
     // ── Internal: merge shared props with page props ─────────────────
 
-    private Map<String, Object> mergeSharedProps(InertiaRequest req, Map<String, Object> pageProps) {
+    private record MergedPropsResult(Map<String, Object> props, List<String> sharedKeys) {}
+
+    private MergedPropsResult mergeSharedProps(InertiaRequest req, Map<String, Object> pageProps) {
         Map<String, Object> merged = new LinkedHashMap<>();
+        Set<String> sharedKeySet = new LinkedHashSet<>();
+
         for (SharedPropsResolver resolver : sharedPropsResolvers) {
-            merged.putAll(resolver.resolve(req));
+            Map<String, Object> resolved = resolver.resolve(req);
+            sharedKeySet.addAll(resolved.keySet());
+            merged.putAll(resolved);
         }
+
+        // Page props override shared props; remove overridden keys from shared tracking
+        sharedKeySet.removeAll(pageProps.keySet());
         merged.putAll(pageProps);
+
+        // Error bag selection
+        resolveErrorBag(req, merged);
+
         merged.putIfAbsent("errors", Map.of());
-        return merged;
+
+        List<String> sharedKeys = new ArrayList<>(sharedKeySet);
+        return new MergedPropsResult(merged, sharedKeys);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void resolveErrorBag(InertiaRequest req, Map<String, Object> merged) {
+        Object errorsObj = merged.get("errors");
+        if (!(errorsObj instanceof Map<?, ?> errorsMap)) return;
+
+        // Check if this is a nested bag structure (all values are Maps)
+        boolean isBagStructure = !errorsMap.isEmpty() && errorsMap.values().stream()
+                .allMatch(v -> v instanceof Map);
+        if (!isBagStructure) return;
+
+        String bag = req.getHeader("X-Inertia-Error-Bag");
+        if (bag == null || bag.isBlank()) {
+            bag = "default";
+        }
+
+        Object selectedBag = ((Map<String, Object>) errorsMap).get(bag.trim());
+        if (selectedBag instanceof Map<?, ?>) {
+            merged.put("errors", selectedBag);
+        } else {
+            merged.put("errors", Map.of());
+        }
     }
 
     // ── Internal: check if this is a partial reload for this component ─
@@ -176,119 +235,94 @@ public class InertiaEngine {
         return partialComponent != null && partialComponent.equals(component);
     }
 
-    // ── Internal: build deferred props group map ─────────────────────
+    // ── Internal: filter props for partial reloads ───────────────────
 
-    private Map<String, List<String>> buildDeferredPropsMap(Map<String, Object> props) {
-        Map<String, List<String>> groups = new LinkedHashMap<>();
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> filterNonPartial(Map<String, Object> props) {
+        Map<String, Object> result = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : props.entrySet()) {
-            if (entry.getValue() instanceof DeferredProp<?> deferred) {
-                groups.computeIfAbsent(deferred.group(), k -> new ArrayList<>())
-                        .add(entry.getKey());
+            Object value = entry.getValue();
+            if (value instanceof OptionalProp<?> || value instanceof DeferredProp<?>) {
+                continue;
+            }
+            if (value instanceof Map<?, ?> map) {
+                result.put(entry.getKey(), filterNonPartial((Map<String, Object>) map));
+            } else {
+                result.put(entry.getKey(), value);
             }
         }
-        return groups;
+        return result;
     }
-
-    // ── Internal: filter props for partial reloads ───────────────────
 
     private Map<String, Object> filterProps(InertiaRequest req, String component,
                                             Map<String, Object> props, boolean isPartialReload) {
-        // Not a partial reload — include everything except OptionalProp and DeferredProp
+        // Not a partial reload — include everything except OptionalProp and DeferredProp (recursively)
         if (!isPartialReload) {
-            Map<String, Object> result = new LinkedHashMap<>();
-            for (Map.Entry<String, Object> entry : props.entrySet()) {
-                Object value = entry.getValue();
-                if (value instanceof OptionalProp<?> || value instanceof DeferredProp<?>) {
-                    continue;
-                }
-                result.put(entry.getKey(), value);
-            }
-            return result;
+            return filterNonPartial(props);
         }
 
         // Partial reload with "only" list (also used by client to fetch deferred props)
         String partialData = req.getHeader("X-Inertia-Partial-Data");
         if (partialData != null && !partialData.isBlank()) {
-            Set<String> only = Arrays.stream(partialData.split(","))
-                    .map(String::trim)
-                    .collect(Collectors.toUnmodifiableSet());
-            Map<String, Object> result = new LinkedHashMap<>();
+            Set<String> only = parseCommaSeparatedHeader(req, "X-Inertia-Partial-Data");
+            Map<String, Object> filtered = PropResolver.filterPropsOnly(props, only);
             for (Map.Entry<String, Object> entry : props.entrySet()) {
-                String key = entry.getKey();
-                Object value = entry.getValue();
-                if (only.contains(key) || value instanceof AlwaysProp<?> || key.equals("errors")) {
-                    result.put(key, value);
+                if (entry.getValue() instanceof AlwaysProp<?> || entry.getKey().equals("errors")) {
+                    filtered.putIfAbsent(entry.getKey(), entry.getValue());
                 }
             }
-            return result;
+            return filtered;
         }
 
         // Partial reload with "except" list
         String partialExcept = req.getHeader("X-Inertia-Partial-Except");
         if (partialExcept != null && !partialExcept.isBlank()) {
-            Set<String> except = Arrays.stream(partialExcept.split(","))
-                    .map(String::trim)
-                    .collect(Collectors.toUnmodifiableSet());
-            Map<String, Object> result = new LinkedHashMap<>();
+            Set<String> except = parseCommaSeparatedHeader(req, "X-Inertia-Partial-Except");
+            Map<String, Object> filtered = PropResolver.filterPropsExcept(props, except);
             for (Map.Entry<String, Object> entry : props.entrySet()) {
-                String key = entry.getKey();
-                Object value = entry.getValue();
-                if (value instanceof OptionalProp<?>) continue;
-                if (except.contains(key) && !(value instanceof AlwaysProp<?>) && !key.equals("errors")) {
-                    continue;
+                if (entry.getValue() instanceof AlwaysProp<?> || entry.getKey().equals("errors")) {
+                    filtered.putIfAbsent(entry.getKey(), entry.getValue());
                 }
-                result.put(key, value);
             }
-            return result;
+            filtered.entrySet().removeIf(e -> e.getValue() instanceof OptionalProp<?>);
+            return filtered;
         }
 
         // Partial reload with no only/except — include everything including OptionalProp
         return new LinkedHashMap<>(props);
     }
 
-    // ── Internal: build merge metadata from MergeProp values ──────────
+    // ── Internal: merge intent override ─────────────────────────────────
 
-    private record MergeMetadata(
-            List<String> mergeProps,
-            List<String> prependProps,
-            List<String> deepMergeProps,
-            Map<String, String> matchPropsOn) {}
+    private PropResolver.MergeMetadata applyMergeIntentOverride(
+            PropResolver.MergeMetadata metadata, String intent) {
+        List<String> allKeys = new ArrayList<>();
+        allKeys.addAll(metadata.mergeProps());
+        allKeys.addAll(metadata.prependProps());
 
-    private MergeMetadata buildMergeMetadata(Map<String, Object> props) {
+        if (allKeys.isEmpty()) return metadata;
+
         List<String> merge = new ArrayList<>();
         List<String> prepend = new ArrayList<>();
-        List<String> deep = new ArrayList<>();
-        Map<String, String> matchOn = new LinkedHashMap<>();
 
-        for (Map.Entry<String, Object> entry : props.entrySet()) {
-            if (entry.getValue() instanceof MergeProp<?> mp) {
-                switch (mp.getStrategy()) {
-                    case APPEND -> merge.add(entry.getKey());
-                    case PREPEND -> prepend.add(entry.getKey());
-                    case DEEP -> deep.add(entry.getKey());
-                }
-                if (mp.getMatchOn() != null) {
-                    matchOn.put(entry.getKey(), mp.getMatchOn());
-                }
-            }
+        if ("append".equalsIgnoreCase(intent)) {
+            merge.addAll(allKeys);
+        } else if ("prepend".equalsIgnoreCase(intent)) {
+            prepend.addAll(allKeys);
+        } else {
+            return metadata;
         }
 
-        return new MergeMetadata(merge, prepend, deep, matchOn);
+        return new PropResolver.MergeMetadata(merge, prepend,
+                metadata.deepMergeProps(), metadata.matchPropsOn());
     }
 
-    // ── Internal: resolve Prop<T> wrappers to raw values ─────────────
-
-    private Map<String, Object> resolveProps(Map<String, Object> props) {
-        Map<String, Object> resolved = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : props.entrySet()) {
-            Object value = entry.getValue();
-            if (value instanceof Resolvable<?> resolvable) {
-                resolved.put(entry.getKey(), resolvable.resolve());
-            } else {
-                resolved.put(entry.getKey(), value);
-            }
-        }
-        return resolved;
+    private Set<String> parseCommaSeparatedHeader(InertiaRequest req, String headerName) {
+        String header = req.getHeader(headerName);
+        if (header == null || header.isBlank()) return Set.of();
+        return Arrays.stream(header.split(","))
+                .map(String::trim)
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     // ── Internal: render responses ───────────────────────────────────

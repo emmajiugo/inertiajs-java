@@ -8,15 +8,15 @@ import java.util.Map;
  */
 final class InertiaSessionHolder {
 
-    private static final ThreadLocal<Map<String, String>> ERRORS = new ThreadLocal<>();
+    private static final ThreadLocal<Map<String, Map<String, ?>>> ERRORS = new ThreadLocal<>();
     private static final ThreadLocal<Map<String, Object>> FLASH = new ThreadLocal<>();
 
     private InertiaSessionHolder() {}
 
-    static void setErrors(Map<String, String> errors) { ERRORS.set(errors); }
+    static void setErrors(Map<String, Map<String, ?>> errors) { ERRORS.set(errors); }
 
-    static Map<String, String> getAndClearErrors() {
-        Map<String, String> errors = ERRORS.get();
+    static Map<String, Map<String, ?>> getAndClearErrors() {
+        Map<String, Map<String, ?>> errors = ERRORS.get();
         ERRORS.remove();
         return errors;
     }

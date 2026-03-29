@@ -9,10 +9,6 @@ public final class InertiaProps {
 
     private InertiaProps() {}
 
-    public static <T> LazyProp<T> lazy(Supplier<T> supplier) {
-        return new LazyProp<>(supplier);
-    }
-
     public static <T> AlwaysProp<T> always(T value) {
         return new AlwaysProp<>(() -> value);
     }

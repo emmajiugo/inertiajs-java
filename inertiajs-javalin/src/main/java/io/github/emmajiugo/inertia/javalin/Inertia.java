@@ -40,14 +40,27 @@ public class Inertia {
     }
 
     /**
-     * Redirect back with validation errors. Stores errors in the session
-     * so they are available on the next request via shared props.
+     * Redirect back with validation errors. Stores errors in the session under the
+     * {@code "default"} error bag, so they are available on the next request via shared props.
      *
      * <p>Accepts {@code Map<String, String>} (single message per field) or
      * {@code Map<String, List<String>>} (multiple messages per field).
      */
     public void redirectWithErrors(Context ctx, String url, Map<String, ?> errors) {
-        ctx.sessionAttribute(ERRORS_SESSION_KEY, errors);
+        redirectWithErrors(ctx, url, errors, "default");
+    }
+
+    /**
+     * Redirect back with validation errors scoped to a named error bag.
+     */
+    @SuppressWarnings("unchecked")
+    public void redirectWithErrors(Context ctx, String url, Map<String, ?> errors, String errorBag) {
+        Map<String, Map<String, ?>> bags = ctx.sessionAttribute(ERRORS_SESSION_KEY);
+        if (bags == null) {
+            bags = new HashMap<>();
+        }
+        bags.put(errorBag, errors);
+        ctx.sessionAttribute(ERRORS_SESSION_KEY, bags);
         ctx.status(303);
         ctx.header("Location", url);
     }
@@ -75,6 +88,10 @@ public class Inertia {
 
     public void location(Context ctx, String url) {
         engine.location(new JavalinInertiaResponse(ctx), url);
+    }
+
+    public void redirectWithFragment(Context ctx, String url) {
+        engine.redirectWithFragment(new JavalinInertiaResponse(ctx), url);
     }
 
     public void render(Context ctx, String component, Map<String, Object> props,

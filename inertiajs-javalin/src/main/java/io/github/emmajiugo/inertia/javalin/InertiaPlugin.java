@@ -49,7 +49,7 @@ public class InertiaPlugin {
         engine.addSharedPropsResolver(req -> {
             Map<String, Object> shared = new HashMap<>();
 
-            Map<String, String> errors = InertiaSessionHolder.getAndClearErrors();
+            Map<String, Map<String, ?>> errors = InertiaSessionHolder.getAndClearErrors();
             if (errors != null && !errors.isEmpty()) {
                 shared.put("errors", errors);
             }
@@ -76,7 +76,8 @@ public class InertiaPlugin {
             }
 
             // Move session errors to ThreadLocal
-            Map<String, String> errors = ctx.sessionAttribute(Inertia.ERRORS_SESSION_KEY);
+            @SuppressWarnings("unchecked")
+            Map<String, Map<String, ?>> errors = ctx.sessionAttribute(Inertia.ERRORS_SESSION_KEY);
             if (errors != null) {
                 ctx.sessionAttribute(Inertia.ERRORS_SESSION_KEY, null);
                 InertiaSessionHolder.setErrors(errors);

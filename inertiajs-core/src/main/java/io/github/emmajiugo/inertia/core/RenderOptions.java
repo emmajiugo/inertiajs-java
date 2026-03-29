@@ -1,32 +1,31 @@
 package io.github.emmajiugo.inertia.core;
 
-/**
- * Optional configuration for a single render call.
- * Controls history encryption, SSR, and other per-page behaviors.
- *
- * Usage:
- * <pre>
- * engine.render(req, res, "Account/Settings", props,
- *     RenderOptions.builder().encryptHistory(true).ssr(false).build());
- * </pre>
- */
+import java.util.Map;
+
 public final class RenderOptions {
 
-    private static final RenderOptions EMPTY = new RenderOptions(null, null, null);
+    private static final RenderOptions EMPTY = new RenderOptions(null, null, null, null, null);
 
     private final Boolean encryptHistory;
     private final Boolean clearHistory;
     private final Boolean ssr;
+    private final Boolean preserveFragment;
+    private final Map<String, Object> scrollProps;
 
-    private RenderOptions(Boolean encryptHistory, Boolean clearHistory, Boolean ssr) {
+    private RenderOptions(Boolean encryptHistory, Boolean clearHistory, Boolean ssr,
+                          Boolean preserveFragment, Map<String, Object> scrollProps) {
         this.encryptHistory = encryptHistory;
         this.clearHistory = clearHistory;
         this.ssr = ssr;
+        this.preserveFragment = preserveFragment;
+        this.scrollProps = scrollProps;
     }
 
     public Boolean getEncryptHistory() { return encryptHistory; }
     public Boolean getClearHistory() { return clearHistory; }
     public Boolean getSsr() { return ssr; }
+    public Boolean getPreserveFragment() { return preserveFragment; }
+    public Map<String, Object> getScrollProps() { return scrollProps; }
 
     public static RenderOptions empty() { return EMPTY; }
     public static Builder builder() { return new Builder(); }
@@ -35,6 +34,8 @@ public final class RenderOptions {
         private Boolean encryptHistory;
         private Boolean clearHistory;
         private Boolean ssr;
+        private Boolean preserveFragment;
+        private Map<String, Object> scrollProps;
 
         private Builder() {}
 
@@ -53,6 +54,19 @@ public final class RenderOptions {
             return this;
         }
 
-        public RenderOptions build() { return new RenderOptions(encryptHistory, clearHistory, ssr); }
+        public Builder preserveFragment(boolean preserveFragment) {
+            this.preserveFragment = preserveFragment;
+            return this;
+        }
+
+        public Builder scrollProps(Map<String, Object> scrollProps) {
+            this.scrollProps = scrollProps;
+            return this;
+        }
+
+        public RenderOptions build() {
+            return new RenderOptions(encryptHistory, clearHistory, ssr,
+                    preserveFragment, scrollProps);
+        }
     }
 }
